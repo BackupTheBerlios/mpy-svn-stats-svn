@@ -174,7 +174,7 @@ class Config:
         self._error_message = None
         self._generate_all = False
         self._stats_to_generate = ['authors_number_of_paths',
-            'authors_by_commits', 'authors_by_commits',
+            'authors_by_commits', 'authors_by_log_message_size',
             'commits_by_time']
         self._svn_binary = 'svn'
         self._output_dir = 'mpy-svn-stats'
