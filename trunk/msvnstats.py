@@ -617,16 +617,23 @@ class HTMLWriter(StatisticWriter):
     def _standard_statistic_header(self):
         """Make all statistic header look the same."""
         r = ''
-        r += "<h2><a name=\"%s\"></a>%s</h2>\n" % (
+
+        h2 = "<h2><a name=\"%s\"></a>%s</h2>\n" % (
             escape(self._statistic.name()),
             escape(self._statistic.title())
-            )
-        r += "<p class=\"topLink\" style=\"text-align: right\"><a href=\"#top\">top</a>\n"
+        )
+
+        goToTopLink = "<a class=\"topLink\" href=\"#top\">top</a>\n"
+
+
+        r = "<table class=\"statisticHeader\"><tr><td>%s</td><td class=\"topLink\">%s</td></table>\n\n" % (
+            h2, goToTopLink)
+
         return r
 
     def _standard_statistic_footer(self):
         """Make all statistic header look the same."""
-        return ""
+        return "<hr class=\"statisticDelimiter\"/>"
 
     def configure(self, config):
         self.is_configured = True
@@ -712,8 +719,32 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
 
             h1,h2 {
                 text-align: center;
-                background: lightgray;
+                background-color: lightgray;
                 font-style: italic;
+            }
+
+            table.statisticHeader {
+                margin-left: 0;
+                margin-right: 0;
+                clear: both;
+                width: 100%;
+            }
+
+            table.statisticHeader td {
+                background-color: lightgray;
+                border-spacing: 0px;
+                margin: 0px;
+                padding: 0px;
+            }
+
+            table.statisticHeader tr td.topLink {
+                text-align: center;
+                width: 3em;
+            }
+
+            table.statisticHeader td h2 {
+                margin-top: 1px;
+                margin-bottom: 1px;
             }
 
             td.menu_column {
@@ -727,15 +758,23 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
             }
 
             .topLink a:link, .topLink a:active, .topLink a:visited {
-                color: lightgray;
+                color: black;
             }
 
             .topLink a:hover {
-                color: gray;
+                color: black;
             }
 
             a.menuLink:link, a.menuLink:active, a.menuLink:visited {
                 color: blue;
+            }
+
+            hr.statisticDelimiter {
+                border-spacing: 0px;
+                border-width: 2px 0px 0px 0px;
+                border-style: solid;
+                margin-bottom: 40pt;
+                border-color: lightgray;
             }
             
         </style>
