@@ -172,7 +172,7 @@ class Config:
         self._repository = None
         self._want_help = False
         self._error_message = None
-        self._generate_all = True
+        self._generate_all = False
         self._stats_to_generate = ['authors_number_of_paths',
             'authors_by_commits', 'authors_by_commits',
             'commits_by_time']
@@ -193,6 +193,8 @@ class Config:
         if optdict.has_key('-h') or optdict.has_key('--help'):
             self._want_help = True
             return None
+        if optdict.has_key('--with-diff-stats'):
+            self._stats_to_generate.update('author_by_diff_size')
         if len(args) != 1:
             self._broken = True
             self._repository = None
