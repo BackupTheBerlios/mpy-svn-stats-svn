@@ -237,10 +237,10 @@ class Stats:
         revisions = RevisionData(dom)
         if config.want_statistic('authors_by_commits'):
             self._statistics.append(AuthorsByCommits(config, revisions))
+        if config.want_statistic('authors_by_log_message_size'):
+            self._statistics.append(AuthorsByCommitLogSize(config, revisions))
         if config.want_statistic('commits_by_time') and _have_pil:
             self._statistics.append(CommitsByTimeGraphStatistic(config, revisions))
-        self._statistics.append(AuthorsByCommitLogSize(config, revisions))
-        print "have %d revisions" % len(revisions)
 
     def __len__(self):
         len(self._statistics)
@@ -578,7 +578,7 @@ class AuthorsByCommitLogSize(TableStatistic):
     def __init__(self, config, revision_data):
         """Generate statistics out of revision data.
         """
-        TableStatistic.__init__(self, 'Authors by total number of commits')
+        TableStatistic.__init__(self, """Authors by total size of commits log messages""")
         assert(isinstance(revision_data, RevisionData))
 
         abc = {}
@@ -595,7 +595,7 @@ class AuthorsByCommitLogSize(TableStatistic):
         self._data = data
 
     def column_names(self):
-        return ('Author', 'Size of commit\'s log]')
+        return ('Author', 'Size of commit\'s log')
 
 
 if __name__ == '__main__':
