@@ -1,0 +1,56 @@
+
+Author: Maciej Pietrzak
+
+Before we start real coding some things should be designed, or at
+least briefly discussed.
+
+Here are some of my thoughts:
+
+1) Generally, statistics are abstract, each statistic needs a
+writer. To generate HTML we need HTML writer, to create LaTeX or
+something else, another writer is required. Statistic
+contains data, that ready to be written out, but no presentation
+information.
+
+2) For now we have one-statistic -- one-class relation. I think
+this is bad, and should be changed before it's too late. One
+statistic class should obviously be a source of many statistic
+objects. For example, we could create tables for only part of
+the revisions, or monthly, weekly and daily graphs with one
+object created with different parameters.
+
+3) There should be dynamic list of command line options:
+--enable-STATISTIC or --disable-STATISTIC. To achieve this,
+objects should be created before we know which statistic is
+needed. This in turn requires that object can be created without
+doing any real calculations.
+
+4) Every instance of the statistic class should have an id, that
+can be used in --enable options or in HTML link.
+
+5) Statistics will have requirements. If statistic is wanted, but
+the environment lacks (for example) required library, statistic
+code will issue a warning.
+
+6) Statistic constructor should take at least statistic
+identifier and revision data. No calculations are performed while
+constructing object. Object can then be tested whether they are
+wanted or not. If object is wanted, calculations are performed.
+
+7) If all statistics are generated, output documents can be
+producted. Multiple output formats should be allowed in one
+program pass.
+
+8) There should be data-retriever classes. Data is now obtained
+by calling svn, at it will stay like that for a while. However,
+there are two important uses for data-retriever objects:
+ a) generating statistics from XML file (obtained earlier with
+ svn log --xml);
+ b) caching;
+
+
+Enough for now.
+
+Any comments?
+
+
