@@ -10,7 +10,7 @@ It aims to be easy to use, but still provide some interesting information.
 It's possible that the profile of the generated stats will promote
 rivalisation in the project area.
 
-Usage: mpy-svn-stats [-h] <url>
+Usage: mpy-svn-stats [-h] [-o dir] <url>
 
  -h      --help              - print this help message
  -o      --output-dir        - set output directory
