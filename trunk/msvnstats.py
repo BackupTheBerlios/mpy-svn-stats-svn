@@ -355,7 +355,16 @@ class AuthorsByChangedPaths(TableStatistic):
 
 class GraphStatistic(Statistic):
     """This stats are presented as a graph.
+
+    This class holds graph abstract data.
+    This is allways f(x) -> y graph, so
+    there is a dict of (x,y) pairs.
+
+    GraphStatistic does not do any output,
+    GraphImageWriter and possibly others
+    translate logical data info image file.
     """
+    
     def __init__(self, name, title):
         Statistic.__init__(self, name, title)
 
@@ -370,6 +379,9 @@ class GraphStatistic(Statistic):
 
     def get_y_range(self):
         return (self._min_y, self._max_y)
+
+    
+
 
 class TotalCommitsByTimeGraphStatistic(GraphStatistic):
     """Show function f(time) -> commits by that time.
@@ -663,6 +675,10 @@ class AuthorsByDiffSize(TableStatistic):
 
     def column_names(self):
         return ('Author', 'Size of diffs', 'Number of lines in diffs')
+
+all_stats_classes = [
+
+]
 
 
 if __name__ == '__main__':
