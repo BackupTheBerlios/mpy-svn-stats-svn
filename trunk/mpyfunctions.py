@@ -13,9 +13,9 @@ def is_cool_number(number):
     dict={}
     for i in string:
         dict[i]=i
-    if len(dict)==1:
+    if len(dict)==1 and number>9:
         return True
-    elif number > 99 and len(dict)==2 and '0' in dict:
+    elif number > 99 and int(string[1:])==0:
         return True
     return False
 
