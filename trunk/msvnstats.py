@@ -935,7 +935,7 @@ class SimpleFunctionGroup(GroupStatistic):
 
 
                     fy = float(y) * float(end_of_week - start_of_week) / float(week_in_seconds)
-                    self._values[author][fx] = fy
+                    self._values[user][fx] = fy
                     if y > self._max_y: self._max_y = y
                     
                 start_of_week += week_in_seconds
