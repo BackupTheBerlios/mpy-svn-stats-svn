@@ -82,7 +82,9 @@ def main(argv):
     
     stats.write(run_time=(run_time_end - run_time_start)) 
 
-    print "got %d stats objects" % stats.count_all()
+    print "Have %d stats objects, %d of them are wanted." % (
+        stats.count_all(),
+        stats.count_wanted())
 
 def get_data(config):
     """Get the analysis source data.
@@ -286,6 +288,12 @@ class Statistic:
         writer = self._writers[mode]
         return writer.output()
 
+    def __str__(self):
+        """Return human-readable representation."""
+        return "Statistic(title='%(title)s', name='%(name)s')" % {
+            'title': self.title(),
+            'name': self.name()
+        }
 
 
 class TableStatistic(Statistic):
@@ -568,13 +576,19 @@ class GroupStatistic(Statistic):
         """Get children."""
         return self._child_stats
 
+    def descendants(self):
+        d = []
+        for child in self.children():
+            if isinstance(child, GroupStatistic):
+                d += child.descendants()
+            else:
+                d.append(child)
+        return d
+
     def configure(self, config):
         Statistic.configure(self, config)
-        print "%s configuring children:" % str(self)
         for child in self._child_stats:
-            print "   - %s" % str(child)
             child.configure(config)
-        print "%s done." % str(self)
 
     def count_all(self):
         """Return the total number of leaf statistics in the group/tree.
@@ -587,6 +601,9 @@ class GroupStatistic(Statistic):
             else:
                 total += 1
         return total
+
+    def count_wanted(self):
+        return len([descendant for descendant in self.descendants() if descendant.is_wanted()])
 
     def calculate(self, revision_data):
         """Pass data to children."""
@@ -1042,8 +1059,6 @@ class GraphImageHTMLWriter(HTMLWriter):
 
         keys = self._statistic._values.keys()
         keys.sort()
-
-        print "have %d pairs" % len(keys)
 
         last_pair = (None, None)
         for key in keys:
