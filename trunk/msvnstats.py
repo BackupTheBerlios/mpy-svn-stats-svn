@@ -567,6 +567,7 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
 
     def write(self, run_time):
         """Write out generated statistics."""
+        _create_output_dir(self._output_dir)
         filename = self._output_dir + '/index.html'
         output_file = file(filename, "w")
         output_file.write(
