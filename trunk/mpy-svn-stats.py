@@ -15,6 +15,8 @@ Usage: mpy-svn-stats [-h] [-o dir] <url>
  -h      --help              - print this help message
  -o      --output-dir        - set output directory
  url - repository url
+
+Authors: Maciej Pietrzak, Joanna Chmiel, Marcin Mankiewicz
 """
 
 import sys
