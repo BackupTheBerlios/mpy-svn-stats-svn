@@ -1201,7 +1201,7 @@ class ModifiedPath:
     def __init__(self, action, path):
         assert(isinstance(action, str) and len(action) == 1,
             'should be one-letter string, is: %s' % str(action))
-        assert(isinstance(path, str), 'should be modified path, is: %s' % str(path))
+        assert(isinstance(path, basestring), 'should be modified path, is: %s' % path)
         self._action = action
         self._path = path
 
