@@ -26,6 +26,7 @@ import getopt
 import time, datetime
 import xml.dom
 from xml.dom.minidom import parseString
+from mpyfunctions import *
 
 # conditional imports
 try:
