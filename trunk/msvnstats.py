@@ -1,6 +1,23 @@
 #!/usr/bin/env python
 # -*- coding: ascii -*-
 
+# MPY SVN STATS - Subversion Repository Statistics Generator 
+# Copyright (C) 2004 name of Maciej Pietrzak
+# 
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
 """\
 mpy-svn-stats is a simple statistics generator (log analyser) for
 Subversion repositories.
@@ -18,6 +35,10 @@ Usage: mpy-svn-stats [-h] [-o dir] <url>
  url - repository url
 
 Authors: Maciej Pietrzak, Joanna Chmiel, Marcin Mankiewicz
+MPY SVN STATS is licensed under GPL. See http://www.gnu.org/copyleft/gpl.html
+for more details.
+Project homepage is http://mpy-svn-stats.berlios.de/
+You can contact authors by email at mpietrzak@users.berlios.de
 """
 
 import sys
