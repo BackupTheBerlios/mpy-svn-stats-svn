@@ -1247,11 +1247,22 @@ class RevisionInfo:
         self._log = self._parse_commit_log(message)
 
     def _parse_author(self, message):
+        """Get author out of logentry.
+        Suprisingly, not all logentries have authors.
+        In that case, author is set to '' (empty string).
+        cvs2svn does that.
+        """
         a = message.getElementsByTagName('author')
-        assert(len(a) == 1)
-        a[0].normalize()
-        assert(len(a[0].childNodes) == 1)
-        return a[0].childNodes[0].data
+        assert len(a) <= 1, AssertionError(
+                'There should be at most one author in revision.\nXML is:\n%s' % (
+                    message.toprettyxml())
+                )
+        if len(a) == 1:
+            a[0].normalize()
+            assert(len(a[0].childNodes) == 1)
+            return a[0].childNodes[0].data
+        else:
+            return ''
 
     def _parse_commit_log(self, message):
         l = message.getElementsByTagName('msg')
