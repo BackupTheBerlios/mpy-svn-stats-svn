@@ -8,6 +8,11 @@ svn co svn://svn.berlios.de/mpy-svn-stats/trunk || exit
 
 cp trunk/msvnstats.py ./ || exit
 
+if which epydoc >> /dev/null; then
+	epydoc --html -o epydoc msvnstats.py
+	scp -r ./epydoc mpietrzak@shell.berlios.de:/home/groups/mpy-svn-stats/htdocs/
+fi
+
 ./msvnstats.py -o mpy-svn-stats svn://svn.berlios.de/mpy-svn-stats || exit
 ./msvnstats.py -o zope-stats svn://svn.zope.org/repos/main/Zope/trunk || exit
 
