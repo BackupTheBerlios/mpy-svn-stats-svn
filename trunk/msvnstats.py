@@ -767,8 +767,8 @@ class GeneralStatisticsHTMLWriter(HTMLWriter):
                 Smallest revision number: %(first_rev_number)s.<br/>
                 Biggest revision number: %(last_rev_number)s.<br/>
                 Revision count: %(revision_count)s.<br/>
-                First revision date: %(first_rev_date)s (%(time_since_first_commit)s ago).<br/>
-                Last revision date: %(last_rev_date)s. (%(time_since_last_commit)s ago).<br/>
+                First revision date: %(first_rev_date)s.<br/>
+                Last revision date: %(last_rev_date)s.<br/>
                 Age of the repository (from first to last revision): %(age_of_repository)s.<br/>
                 Commits per year: %(commits_per_year)s.<br/>
                 Commits per month: %(commits_per_month)s.<br/>
@@ -786,14 +786,6 @@ class GeneralStatisticsHTMLWriter(HTMLWriter):
             'age_of_repository': self._format_time_span(
                                             statistic.get_first_rev_date(),
                                             statistic.get_last_rev_date()
-                                        ),
-            'time_since_last_commit': self._format_time_span(
-                                            statistic.get_last_rev_date(),
-                                            time.time()
-                                        ),
-            'time_since_first_commit': self._format_time_span(
-                                            statistic.get_first_rev_date(),
-                                            time.time()
                                         ),
             'commits_per_year': ("%.2f" % (statistic.get_revision_count() * 365.25 * 24 * 60 * 60
                     / (statistic.get_last_rev_date() - statistic.get_first_rev_date()))
