@@ -115,6 +115,12 @@ def _create_output_dir(dir):
         
 
 class Config:
+    """This class contains all data about configuration, environment
+    and parameters.
+    Statistics' may choose to tune their parameters or even disable
+    themselves based on these informations.
+    """
+
     def __init__(self, argv):
         self._argv = argv
         self._broken = False
@@ -126,6 +132,12 @@ class Config:
 
         self._enabled_stats = []
         self._disabled_stats = []
+
+        self.have_pil = _have_pil
+        if not self.have_pil:
+            self._print_warning_about_pil()
+        else:
+            print "Will generate PIL graphs."
 
         try:
             optlist, args = getopt.getopt(
@@ -170,7 +182,6 @@ class Config:
         self.start_date = None
         self.end_date = time.time()
 
-
     def is_not_good(self):
         return self._broken
 
@@ -202,6 +213,10 @@ class Config:
         print __doc__
         return None
 
+    def _print_warning_about_pil(self):
+        """Print a warning."""
+        print """Python Imagin Library could not be found - graphs are disabled."""
+
 
 class Statistic:
     """Abstract class for Stats' elements.
@@ -226,8 +241,15 @@ class Statistic:
         assert isinstance(self._name, basestring), ValueError('Name must be a string')
         return self._name
 
-    def is_wanted(self):
-        return self._wanted
+    def is_wanted(self, mode=None):
+        """Check if particular output mode is wanted (either by default or
+        explicitly requested).
+        If mode is Node, return True is there is at least one output mode.
+        """
+        if mode is not None:
+            return mode in self._wanted_output_modes
+        else:
+            return len(self._wanted_output_modes) > 0
 
     def _want_output_mode(self, name, setting=True):
         if setting:
@@ -246,7 +268,10 @@ class Statistic:
 
     def configure(self, config):
         self._configure_writers(config)
-
+        if self.requires_graphics and not config.have_pil:
+            print "%s requires graphics - disabling." % str(self)
+            self._want_output_mode('html', False)
+            
     def _configure_writers(self, config):
         for writer in self._writers.values():
             writer.configure(config)
@@ -260,6 +285,7 @@ class Statistic:
     def output(self, mode):
         writer = self._writers[mode]
         return writer.output()
+
 
 
 class TableStatistic(Statistic):
@@ -475,6 +501,7 @@ class CommitsByWeekGraphStatistic(GraphStatistic):
     
     def calculate(self, revision_data):
         """Calculate statistic."""
+        assert len(self._wanted_output_modes) > 0
         
         week_in_seconds = 7 * 24 * 60 * 60 * 1.0
     
@@ -543,8 +570,11 @@ class GroupStatistic(Statistic):
 
     def configure(self, config):
         Statistic.configure(self, config)
+        print "%s configuring children:" % str(self)
         for child in self._child_stats:
+            print "   - %s" % str(child)
             child.configure(config)
+        print "%s done." % str(self)
 
     def count_all(self):
         """Return the total number of leaf statistics in the group/tree.
@@ -562,7 +592,8 @@ class GroupStatistic(Statistic):
         """Pass data to children."""
 
         for child in self._child_stats:
-            child.calculate(revision_data)
+            if child.is_wanted():
+                child.calculate(revision_data)
 
 
 class AllStatistics(GroupStatistic):
@@ -585,6 +616,7 @@ class AllStatistics(GroupStatistic):
         self.append(CommitsByWeekGraphStatistic(config))
         self._set_writer('html', TopLevelGroupStatisticHTMLWriter(self))
         self._want_output_mode('html')
+
 
 
 class AuthorsByCommitsGroup(GroupStatistic):
@@ -651,15 +683,15 @@ class GroupStatisticHTMLWriter(HTMLWriter):
 class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
     """Class for writing one, top level
     GroupStatistic.
-
     """
+
+    output_mode = 'html'
+    
     def __init__(self, statistic=None):
         GroupStatisticHTMLWriter.__init__(self, statistic)
 
     def configure(self, config):
-        """Confugure - generally - get the output directory."""
-        assert isinstance(config, Config), ValueError(
-            "Expected Config instance, got %r instead" % repr(config))
+        """Configure - generally - get the output directory."""
         self._output_dir = config.get_output_dir()
 
     def write(self, run_time):
@@ -785,9 +817,6 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
 
     def _page_foot(self, run_time):
         """Return HTML page foot."""
-
-        
-
         return """
         <hr/>
         <p class="foot">
@@ -810,8 +839,17 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
         """Return statistic as li tag.
         """
 
+        if not statistic.is_wanted(self.output_mode):
+            return ''
+
         r = ""
         if isinstance(statistic, GroupStatistic):
+
+            # count wanted children
+            wanted_children = len([child for child in statistic.children() if child.is_wanted(self.output_mode)])
+            if wanted_children == 0:
+                return ''
+
             r += "<li>%s:\n<ul>\n" % statistic.title()
             for child in statistic.children():
                 r += self._recursive_menu(child)
@@ -839,7 +877,8 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
         r = ''
 
         for stat in flat:
-            r += stat.output('html')
+            if stat.is_wanted('html'):
+                r += stat.output('html')
 
         return r
 
