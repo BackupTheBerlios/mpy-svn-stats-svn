@@ -14,6 +14,7 @@ Usage: mpy-svn-stats [-h] [-o dir] <url>
 
  -h      --help              - print this help message
  -o      --output-dir        - set output directory
+         --svn-binary        - use different svn client instead of ``svn''
  url - repository url
 
 Authors: Maciej Pietrzak, Joanna Chmiel, Marcin Mankiewicz
@@ -160,7 +161,8 @@ def output_stats(config, stats):
 
 def _create_output_dir(dir):
     """Create output dir."""
-    os.path.isdir(dir)
+    if not os.path.isdir(dir):
+        os.mkdir(dir)
         
 
 class Config:
@@ -176,7 +178,7 @@ class Config:
         self._output_dir = 'mpy-svn-stats'
 
         try:
-            optlist, args = getopt.getopt(argv[1:], 'ho:', ['help', 'output-dir='])
+            optlist, args = getopt.getopt(argv[1:], 'ho:', ['help', 'output-dir=', 'svn-binary='])
         except getopt.GetoptError, e:
             self._broken = True
             self._error_message = str(e)
@@ -199,6 +201,7 @@ class Config:
         for key,value in optlist:
             if key == '-o': self._output_dir = value
             elif key == '--output-dir': self._output_dir = value
+            elif key == '--svn-binary': self._svn_binary = value
         
 
     def is_not_good(self):
@@ -245,12 +248,14 @@ class Stats:
     def __init__(self, config, dom):
         self._statistics = []
         revisions = RevisionData(dom)
+        if config.want_statistic('authors_number_of_paths'):
+            self._statistics.append(AuthorsByChangedPaths(config, revisions))
         if config.want_statistic('authors_by_commits'):
             self._statistics.append(AuthorsByCommits(config, revisions))
         if config.want_statistic('authors_by_log_message_size'):
             self._statistics.append(AuthorsByCommitLogSize(config, revisions))
         if config.want_statistic('commits_by_time') and _have_pil:
-            self._statistics.append(CommitsByTimeGraphStatistic(config, revisions))
+            self._statistics.append(TotalCommitsByTimeGraphStatistic(config, revisions))
 
     def __len__(self):
         len(self._statistics)
@@ -263,7 +268,7 @@ class Stats:
 class Statistic:
     """Abstract class for Stats' elements.
     """
-    def __init__(self, title):
+    def __init__(self, name, title):
         self._title = title
         pass
 
@@ -271,12 +276,15 @@ class Statistic:
         assert(isinstance(self._title, str), 'Title of the statistic must be specified!')
         return self._title
 
+    def name(self):
+        return self._name
+
 
 class TableStatistic(Statistic):
     """A statistic that is presented as a table.
     """
-    def __init__(self, title):
-        Statistic.__init__(self, title)
+    def __init__(self, name, title):
+        Statistic.__init__(self, name, title)
     
     def rows(self):
         return self._data
@@ -294,7 +302,7 @@ class AuthorsByCommits(TableStatistic):
     def __init__(self, config, revision_data):
         """Generate statistics out of revision data.
         """
-        TableStatistic.__init__(self, 'Authors by total number of commits')
+        TableStatistic.__init__(self, 'authors_by_number_of_commits', 'Authors by total number of commits')
         assert(isinstance(revision_data, RevisionData))
 
         abc = {}
@@ -312,11 +320,37 @@ class AuthorsByCommits(TableStatistic):
     def column_names(self):
         return ('Author', 'Total number of commits')
 
+
+class AuthorsByChangedPaths(TableStatistic):
+    """Authors sorted by total number of changed paths.
+    """
+    def __init__(self, config, revision_data):
+        """Generate statistics out of revision data.
+        """
+        TableStatistic.__init__(self, 'authors_number_of_paths', 'Authors by total number of changed paths')
+        assert(isinstance(revision_data, RevisionData))
+
+        abp = {}
+
+        for rv in revision_data.get_revisions():
+            author = rv.get_author()
+            if not abp.has_key(author): abp[author] = len(rv.get_modified_paths())
+            else: abp[author] += len(rv.get_modified_paths())
+
+        data = [(a, abp[a]) for a in abp.keys()]
+        data.sort(lambda x,y: cmp(y[1], x[1]))
+
+        self._data = data
+
+    def column_names(self):
+        return ('Author', 'Total number of changed paths')
+
+
 class GraphStatistic(Statistic):
     """This stats are presented as a graph.
     """
-    def __init__(self, title):
-        Statistic.__init__(self, title)
+    def __init__(self, name, title):
+        Statistic.__init__(self, name, title)
 
     def keys(self):
         return self._keys
@@ -330,19 +364,20 @@ class GraphStatistic(Statistic):
     def get_y_range(self):
         return (self._min_y, self._max_y)
 
-class CommitsByTimeGraphStatistic(GraphStatistic):
+class TotalCommitsByTimeGraphStatistic(GraphStatistic):
     """Show function f(time) -> commits by that time.
     """
     def __init__(self, config, revision_data):
         assert(isinstance(revision_data, RevisionData))
-        GraphStatistic.__init__(self, 'Commits by time')
+        GraphStatistic.__init__(self, 'total_commit_count_in_time', 'Total commit count by time')
         self._revision_data = revision_data
         self._config = config
 
         data = {}
         count = 0
         date_min = 0
-        date_max = 0
+        date_max = datetime.datetime.now()
+        date_max = time.mktime(time.strptime(datetime.datetime.now().isoformat()[:19], '%Y-%m-%dT%H:%M:%S'))
         first = True
         for rv in revision_data.values():
             count += 1
@@ -352,14 +387,11 @@ class CommitsByTimeGraphStatistic(GraphStatistic):
 
             if first:
                 date_min = date
-                date_max = date
+#                date_max = date
                 first = False
             else:
                 if date < date_min: date_min = date
-                elif date > date_max: date_max = date
-
-        print "min date: %f" % date_min
-        print "max date: %f" % date_max
+#                elif date > date_max: date_max = date
 
         self._min_y = float(0)
         self._max_y = float(count)
@@ -406,9 +438,6 @@ class GraphImageWriter:
         cur_x = cur_y = 0.0
 
         draw = ImageDraw.Draw(im)
-
-        print "x range: %f %f" % (min_x, max_x)
-        
 
         for k in self._stats.keys():
             v = self._stats[k]
@@ -588,7 +617,7 @@ class AuthorsByCommitLogSize(TableStatistic):
     def __init__(self, config, revision_data):
         """Generate statistics out of revision data.
         """
-        TableStatistic.__init__(self, """Authors by total size of commits log messages""")
+        TableStatistic.__init__(self, 'authors_by_log_size', """Authors by total size of commits log messages""")
         assert(isinstance(revision_data, RevisionData))
 
         abc = {}
