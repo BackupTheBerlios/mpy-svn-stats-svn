@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # -*- coding: ascii -*-
 
 """
@@ -173,7 +173,9 @@ class Config:
         self._want_help = False
         self._error_message = None
         self._generate_all = True
-        self._stats_to_generate = []
+        self._stats_to_generate = ['authors_number_of_paths',
+            'authors_by_commits', 'authors_by_commits',
+            'commits_by_time']
         self._svn_binary = 'svn'
         self._output_dir = 'mpy-svn-stats'
 
@@ -254,6 +256,8 @@ class Stats:
             self._statistics.append(AuthorsByCommits(config, revisions))
         if config.want_statistic('authors_by_log_message_size'):
             self._statistics.append(AuthorsByCommitLogSize(config, revisions))
+        if config.want_statistic('author_by_diff_size'):
+            self._statistics.append(AuthorsByDiffSize(config, revisions))
         if config.want_statistic('commits_by_time') and _have_pil:
             self._statistics.append(TotalCommitsByTimeGraphStatistic(config, revisions))
 
@@ -609,7 +613,6 @@ class ModifiedPath:
 
 
 
-
 class AuthorsByCommitLogSize(TableStatistic):
     """Specific statistic - show table author -> commit log, sorted
     by commit log size.
@@ -635,6 +638,39 @@ class AuthorsByCommitLogSize(TableStatistic):
 
     def column_names(self):
         return ('Author', 'Size of log messages')
+
+class AuthorsByDiffSize(TableStatistic):
+    """Specific statistic - shows table author -> diffs size, sorted by size
+    """
+    def __init__(self, config, revision_data):
+        """Generate statistics out of revision data and `svn diff`.
+        """
+        TableStatistic.__init__(self, 'author_by_diff_size', 'Authors by total size of diffs')
+        assert(isinstance(revision_data, RevisionData))
+
+        abc = {}
+
+        for rv in revision_data.get_revisions():
+            author = rv.get_author()
+            rev_number = rv.get_revision_number()
+            command = "%s -r %d:%d diff %s" % (config.get_svn_binary(),
+                rev_number-1, rev_number,
+                config.get_repository_url())
+            f = os.popen(command)
+            result = f.read()
+            f.close()
+            if not abc.has_key(author): 
+                abc[author] = (len(result), len(result.split()))
+            else:
+                abc[author] = (abc[author][0] + len(result), abc[author][1] + len(result.split()))
+
+        data = [(a, abc[a][0], abc[a][1]) for a in abc.keys()]
+        data.sort(lambda x,y: cmp(y[1], x[1]))
+
+        self._data = data
+
+    def column_names(self):
+        return ('Author', 'Size of diffs', 'Number of lines in diffs')
 
 
 if __name__ == '__main__':
