@@ -50,7 +50,6 @@ import xml.dom
 import locale
 from cgi import escape
 from xml.dom.minidom import parseString
-from mpyfunctions import *
 
 # conditional imports
 try:
@@ -64,7 +63,7 @@ def main(argv):
     if config.is_not_good(): return config.usage()
     if config.want_help(): return config.show_help()
 
-    stats = AllStatistics()
+    stats = AllStatistics(config)
     stats.configure(config)
     xmldata = get_data(config)
     
@@ -78,8 +77,6 @@ def main(argv):
     stats.write(run_time=(run_time_end - run_time_start)) 
 
     print "got %d stats objects" % stats.count_all()
-#    stats = generate_stats(config, data)
-#    output_stats(config, stats)
 
 def get_data(config):
     """Get the analysis source data.
@@ -203,7 +200,7 @@ class Statistic:
     wanted_by_default = True
     requires_graphics = False
     
-    def __init__(self, name, title):
+    def __init__(self, config, name, title):
         assert isinstance(name, basestring), ValueError("name must be a string")
         assert isinstance(title, basestring), ValueError("title must be a string")
         self._name = name
@@ -258,8 +255,8 @@ class Statistic:
 class TableStatistic(Statistic):
     """A statistic that is presented as a table.
     """
-    def __init__(self, name, title):
-        Statistic.__init__(self, name, title)
+    def __init__(self, config, name, title):
+        Statistic.__init__(self, config, name, title)
 
         # we want to be printed with TableHTMLWriter by default
         self._set_writer('html', TableHTMLWriter(self))
@@ -278,9 +275,9 @@ class GeneralStatistics(Statistic):
     """General (opening) statistics (like first commit, last commit, total commit count etc).
     Outputted by simple text.
     """
-    def __init__(self):
+    def __init__(self, config):
         """Initialise."""
-        Statistic.__init__(self, "general_statistics", "General statistics")
+        Statistic.__init__(self, config, "general_statistics", "General statistics")
         self._set_writer('html', GeneralStatisticsHTMLWriter(self))
         self._want_output_mode('html')
 
@@ -318,10 +315,10 @@ class AuthorsByCommits(TableStatistic):
     """Specific statistic - show table author -> commit count sorted
     by commit count.
     """
-    def __init__(self):
+    def __init__(self, config):
         """Generate statistics out of revision data.
         """
-        TableStatistic.__init__(self, 'authors_by_number_of_commits', 'Authors by total number of commits')
+        TableStatistic.__init__(self, config, 'authors_by_number_of_commits', 'Authors by total number of commits')
 
     def column_names(self):
         return ('Author', 'Total number of commits', 'Percentage of total commit count')
@@ -365,10 +362,10 @@ class AuthorsByCommits(TableStatistic):
 class AuthorsByChangedPaths(TableStatistic):
     """Authors sorted by total number of changed paths.
     """
-    def __init__(self):
+    def __init__(self, config):
         """Generate statistics out of revision data.
         """
-        TableStatistic.__init__(self, 'authors_number_of_paths', 'Authors by total number of changed paths')
+        TableStatistic.__init__(self, config, 'authors_number_of_paths', 'Authors by total number of changed paths')
 
     def configure(self, config):
         pass
@@ -415,14 +412,16 @@ class GraphStatistic(Statistic):
     there is a dict of (x,y) pairs.
 
     GraphStatistic does not do any output,
-    GraphImageWriter and possibly others
+    GraphImageHTMLWriter and possibly others
     translate logical data info image file.
     """
 
     requires_graphics = True
     
-    def __init__(self, name, title):
-        Statistic.__init__(self, name, title)
+    def __init__(self, config, name, title):
+        Statistic.__init__(self, config, name, title)
+        self._set_writer('html', GraphImageHTMLWriter(self))
+        self._want_output_mode('html')
 
     def keys(self):
         return self._keys
@@ -437,42 +436,46 @@ class GraphStatistic(Statistic):
         return (self._min_y, self._max_y)
 
 
-class TotalCommitsByTimeGraphStatistic(GraphStatistic):
-    """Show function f(time) -> commits by that time.
-    """
-    def __init__(self, config, revision_data):
-        assert(isinstance(revision_data, RevisionData))
-        GraphStatistic.__init__(self, 'total_commit_count_in_time', 'Total commit count by time')
-        self._revision_data = revision_data
-        self._config = config
+class CommitsByWeekGraphStatistic(GraphStatistic):
+    """Graph showing number of commits by week."""
 
-        data = {}
-        count = 0
-        date_min = 0
-        date_max = datetime.datetime.now()
-        date_max = time.mktime(time.strptime(datetime.datetime.now().isoformat()[:19], '%Y-%m-%dT%H:%M:%S'))
-        first = True
-        for rv in revision_data.values():
-            count += 1
-            # this goes in chronological order
-            date = rv.get_date()
-            data[date] = count
+    def __init__(self, config):
+        """Initialise."""
+        GraphStatistic.__init__(self, config, "commits_by_week_graph", "Number of commits in week")
+    
+    def calculate(self, revision_data):
+        """Calculate statistic."""
+        
+        week_in_seconds = 7 * 24 * 60 * 60 * 1.0
+    
+        start_of_week = revision_data.get_first_revision().get_date()
+        end_of_week = start_of_week + week_in_seconds
 
-            if first:
-                date_min = date
-#                date_max = date
-                first = False
-            else:
-                if date < date_min: date_min = date
-#                elif date > date_max: date_max = date
+        self._min_x = revision_data.get_first_revision().get_date()
+        self._max_x = revision_data.get_last_revision().get_date()
+        self._min_y = 0
+        self._max_y = 0
+        self._values = {}
 
-        self._min_y = float(0)
-        self._max_y = float(count)
-        self._min_x = float(date_min)
-        self._max_x = float(date_max)
-        self._data = data
-        self._keys = data.keys()
-        self._keys.sort()
+        while start_of_week < revision_data.get_last_revision().get_date():
+            commits = revision_data.get_revisions_by_date(start_of_week, end_of_week)
+            y = len(commits)
+            fx = float(start_of_week+(end_of_week - start_of_week)/2)
+            fy = float(y) * float(end_of_week - start_of_week) / float(week_in_seconds)
+            self._values[fx] = fy
+
+            if y > self._max_y: self._max_y = y
+
+            start_of_week += week_in_seconds
+            end_of_week = start_of_week + week_in_seconds
+            if end_of_week > revision_data.get_last_revision().get_date():
+                end_of_week = revision_data.get_last_revision().get_date()
+    
+    def horizontal_axis_title(self):
+        return "Time"
+    
+    def vertical_axis_title(self):
+        return "Number of commits"
 
 
 class GroupStatistic(Statistic):
@@ -482,10 +485,10 @@ class GroupStatistic(Statistic):
     all children stats, and putting it in one group
     (for example - in web page section).
     """
-    def __init__(self, name, title):
+    def __init__(self, config, name, title):
         """Initialize internal variables. Must be called.
         """
-        Statistic.__init__(self, name, title)
+        Statistic.__init__(self, config, name, title)
         self._child_stats = []
 
     def __getitem__(self, number):
@@ -540,14 +543,15 @@ class AllStatistics(GroupStatistic):
     After that, objects are queried whether they
     are to be calculated."""
 
-    def __init__(self):
+    def __init__(self, config):
         """This constructor takes no parameters.
         """
-        GroupStatistic.__init__(self, "mpy_svn_stats", "MPY SVN Statistics")
-        self.append(GeneralStatistics())
-        self.append(AuthorsByCommits())
-        self.append(AuthorsByChangedPaths())
-        self.append(AuthorsByCommitLogSize())
+        GroupStatistic.__init__(self, config, "mpy_svn_stats", "MPY SVN Statistics")
+        self.append(GeneralStatistics(config))
+        self.append(AuthorsByCommits(config))
+        self.append(AuthorsByChangedPaths(config))
+        self.append(AuthorsByCommitLogSize(config))
+        self.append(CommitsByWeekGraphStatistic(config))
         self._set_writer('html', TopLevelGroupStatisticHTMLWriter(self))
         self._want_output_mode('html')
 
@@ -560,8 +564,20 @@ class StatisticWriter:
 
 class HTMLWriter(StatisticWriter):
     """An abstract class for HTML writing."""
-    pass
+    
+    def _standard_statistic_header(self):
+        """Make all statistic header look the same."""
+        r = ''
+        r += "<h2><a name=\"%s\"></a>%s</h2>\n" % (
+            escape(self._statistic.name()),
+            escape(self._statistic.title())
+            )
+        r += "<p class=\"topLink\" style=\"text-align: right\"><a href=\"#top\">top</a>\n"
+        return r
 
+    def _standard_statistic_footer(self):
+        """Make all statistic header look the same."""
+        return ""
 
 class GroupStatisticHTMLWriter(HTMLWriter):
     """Class for writing group statistics (abstract)."""
@@ -601,9 +617,9 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
     def _page_head(self):
         """Return HTML page head."""
         return """\
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
         "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+    <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
     <head>
         <meta name="Generator" content="mpy-svn-stats v. 0.1"/>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
@@ -669,7 +685,7 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
     </head>
     <body>
         <h1><a name="top"></a>mpy-svn-stats</h1>
-"""
+    """
 
     def _page_foot(self, run_time):
         """Return HTML page foot."""
@@ -741,14 +757,11 @@ class TableHTMLWriter(HTMLWriter):
 
     def output(self):
         r = '\n'
-        r += "<h2><a name=\"%s\"></a>%s</h2>\n" % (
-            escape(self._statistic.name()),
-            escape(self._statistic.title())
-            )
-        r += "<p class=\"topLink\" style=\"text-align: right\"><a href=\"#top\">top</a>\n"
+        r += self._standard_statistic_header()
         r += "<table class=\"statistic\">\n%s\n%s\n</table>\n\n" % (
             self._table_header(),
             self._table_body())
+        r += self._standard_statistic_footer()
         return r
 
     def _table_header(self):
@@ -853,7 +866,7 @@ class GeneralStatisticsHTMLWriter(HTMLWriter):
         return s
 
     
-class GraphImageWriter:
+class GraphImageHTMLWriter(HTMLWriter):
     """A class that writes graphs to image files.
     Basically, a GraphStatistic contains data that
     make possible to draw a graph.
@@ -862,57 +875,186 @@ class GraphImageWriter:
     Also it may contain type in future releases.
     Now, lets just draw plots.
     """
-    def __init__(self, config, name, graph_stats):
+    def __init__(self, statistic):
         """Initialise instance. Name will be used for
         image filename."""
-        assert(isinstance(graph_stats, GraphStatistic))
-        assert(_have_pil)
-        self._stats = graph_stats
-        self._config = config
-        self._name = name
+        assert isinstance(statistic, GraphStatistic)
+        self._statistic = statistic
+
+    def configure(self, config):
+        """Configure Graph Image HTML Writer."""
+        self._image_width = 600
+        self._image_height = 200
+        self._margin_bottom = 50
+        self._margin_top = 20
+        self._margin_left = 50
+        self._margin_right = 20
+        self._image_dir = config.get_output_dir()
 
     def get_image_fname(self):
-        return self._name + '.png'
+        return self._image_dir + '/' + self._statistic.name() + '.png'
 
-    def write(self):
-        self.write_image()
+    def get_image_html_src(self):
+        return self._statistic.name() + '.png'
 
-    def write_image(self):
-        """Do calculations, write image.
-        """
-        im = Image.new('RGB', (800,600), 'white')
-
-        first = True
-        min_x, max_x = self._stats.get_x_range()
-        min_y, max_y = self._stats.get_y_range()
-        last_x = last_y = 0.0
-        cur_x = cur_y = 0.0
-
+    def _write_image(self):
+        """Write image files."""
+        image_size = (self._image_width, self._image_height)
+        im = Image.new("RGB", image_size, 'white')
         draw = ImageDraw.Draw(im)
 
-        for k in self._stats.keys():
-            v = self._stats[k]
-#            print "k,v: %f %f" % (k,v)
-            if not first:
-                cur_x = float((k - min_x) / (max_x - min_x))
-                cur_y = float((v - min_y) / (max_y - min_y))
+        self._draw_axes(im, draw)
 
-                px1 = last_x * float(im.size[0])
-                py1 = float(im.size[1]) - last_y * float(im.size[1])
+        keys = self._statistic._values.keys()
+        keys.sort()
 
-                px2 = cur_x * float(im.size[0])
-                py2 = float(im.size[1]) - cur_y * float(im.size[1])
+        print "have %d pairs" % len(keys)
 
-                draw.line( (px1, py1, px2, py2), 'black')
-#                print "line: %f %f -> %f %f" % (px1, py1, px2, py2)
-        
-            last_x = float(cur_x)
-            last_y = float(cur_y)
-            first = False
+        last_pair = (None, None)
+        for key in keys:
+            value = self._statistic._values[key]
+            last_pair = self._plot(draw, last_pair, (key, value))
 
         del draw
-        im.save(self._config.get_output_dir() + '/' + self._name + '.png')
+        im.save(self.get_image_fname())
+
+    def _plot(self, draw, from_tuple, to_tuple):
+        if from_tuple != (None, None):
+            (imx1, imy1) = self._graph_to_image(from_tuple)
+            (imx2, imy2) = self._graph_to_image(to_tuple)
+
+            draw.line((imx1, imy1, imx2, imy2), 'black')
+        return to_tuple
+
+    def _graph_to_image(self, point):
+        gx = float(point[0])
+        gy = float(point[1])
+        point = (gx, gy)
+
+        assert gx >= self._statistic._min_x
+        assert gx <= self._statistic._max_x, AssertionError("bad gx: %f (should be smaller than %f)" % (gx, self._statistic._max_x))
+        assert gy >= self._statistic._min_y
+        assert gy <= self._statistic._max_y
+
+        margin_left = self._margin_left
+        margin_right = self._margin_right
+        margin_top = self._margin_top
+        margin_bottom = self._margin_bottom
+
+        image_width = self._image_width
+        image_height = self._image_height
+
+        range_x = float(self._statistic._max_x - self._statistic._min_x)
+        range_y = float(self._statistic._max_y - self._statistic._min_y)
+
+        assert range_x >= 0
+        assert range_y >= 0
+
+        min_x = float(self._statistic._min_x)
+        min_y = float(self._statistic._min_y)
+
+        x = margin_left + (gx - min_x) * (image_width - margin_left - margin_right) / range_x
+
+        pcy = (gy - min_y) / range_y
+        graph_height = image_height - margin_top - margin_bottom
+        pxy = pcy * graph_height
+        y = margin_top + graph_height - pxy
+
+        return (x, y)
+
+    def _draw_axes(self, image, draw):
+        self._draw_horizontal_axis(image, draw)
+        self._draw_vertical_axis(image, draw)
+        self._draw_horizontal_axis_title(image, draw)
+        self._draw_vertical_axis_title(image, draw)
+
+    def _draw_horizontal_axis(self, image, draw):
+        start_x = self._margin_left
+        start_y = self._image_height - self._margin_bottom
+        end_x = self._image_width - self._margin_right
+        end_y = start_y
+
+        length = self._image_width - self._margin_left - self._margin_right
+
+        draw.line((start_x, start_y, end_x, end_y), '#999')
+        draw.line((end_x, end_y, end_x - 5, end_y - 3), '#999')
+        draw.line((end_x, end_y, end_x - 5, end_y + 3), '#999')
+
+    def _draw_vertical_axis(self, image, draw):
+        start_x = self._margin_left
+        start_y = self._image_height - self._margin_bottom
+        end_x = start_x
+        end_y = self._margin_top
+
+        draw.line((start_x, start_y, end_x, end_y), '#999')
+        draw.line((end_x, end_y, end_x + 3, end_y + 5), '#999')
+        draw.line((end_x, end_y, end_x - 3, end_y + 5), '#999')
+
+    def _draw_horizontal_axis_title(self, image, draw):
+        text = self._statistic.horizontal_axis_title()
+        (text_width, text_height) = draw.textsize(text)
+
+        corner_x = self._image_width - self._margin_right
+        corner_y = self._image_height - self._margin_bottom
+
+        pos_x = corner_x - text_width - 10
+        pos_y = corner_y + 10
         
+        draw.text((pos_x, pos_y), text, fill='black')
+
+    def _draw_vertical_axis_title(self, image, draw):
+
+        text_im_width = 300
+        text_im_height = 200
+
+        textim = Image.new('RGB',
+            (text_im_width, text_im_height), 'white')
+        textdraw = ImageDraw.Draw(textim)
+    
+        text = self._statistic.vertical_axis_title()
+        (text_width, text_height) = textdraw.textsize(text)
+
+        textdraw.text((0,0), text, fill='black')
+
+
+        del textdraw
+
+        textim = textim.crop((0, 0, text_width, text_height))
+        textim = textim.rotate(90)
+
+        corner_x = self._margin_left
+        corner_y = self._margin_top
+
+        pos_x = corner_x - text_height - 10
+        pos_y = corner_y + 10
+
+        image.paste(textim,
+            (
+                pos_x, pos_y, 
+                pos_x + text_height,
+                pos_y + text_width
+            )
+        )
+        
+
+        del textim
+        
+    def output(self):
+        """Outputting."""
+        r = ''
+        self._write_image()
+
+        r += self._standard_statistic_header()
+        r += """
+            <p>
+                <img border="1" src="%(image_src)s"/>
+            </p>
+        """ % {
+            'image_src': self.get_image_html_src()
+        }
+        r += self._standard_statistic_footer()
+
+        return r
 
 
 class RevisionData:
@@ -965,6 +1107,14 @@ class RevisionData:
 
     def values(self):
         return self.get_revisions()
+
+    def get_revisions_by_date(self, start_date, end_date):
+        revisions = []
+        for rv in self.get_revisions():
+            if start_date <= rv.get_date() < end_date:
+                revisions.append(rv)
+        return revisions
+                
 
 class RevisionInfo:
     def __init__(self, message): 
@@ -1066,10 +1216,10 @@ class AuthorsByCommitLogSize(TableStatistic):
     """Specific statistic - show table author -> commit log, sorted
     by commit log size.
     """
-    def __init__(self):
+    def __init__(self, config):
         """Generate statistics out of revision data.
         """
-        TableStatistic.__init__(self, 'authors_by_log_size', """Authors by total size of commit log messages""")
+        TableStatistic.__init__(self, config, 'authors_by_log_size', """Authors by total size of commit log messages""")
 
     def configure(self, config):
         """Handle configuration."""
