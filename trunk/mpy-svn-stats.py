@@ -239,6 +239,7 @@ class Stats:
             self._statistics.append(AuthorsByCommits(config, revisions))
         if config.want_statistic('commits_by_time') and _have_pil:
             self._statistics.append(CommitsByTimeGraphStatistic(config, revisions))
+        self._statistics.append(AuthorsByCommitLogSize(config, revisions))
         print "have %d revisions" % len(revisions)
 
     def __len__(self):
@@ -474,12 +475,15 @@ class RevisionInfo:
     def get_author(self):
         return self._author
 
+    def get_commit_log(self):
+        return self._log
+
     def get_revision_number(self):
         return self._revision_number
 
     def get_modified_paths(self):
         return self._modified_paths
-
+    
     def get_date(self):
         return self._date
 
@@ -489,6 +493,7 @@ class RevisionInfo:
         self._revision_number = self._parse_revision_number(message)
         self._modified_paths = self._parse_paths(message)
         self._date = self._parse_date(message)
+        self._log = self._parse_commit_log(message)
 
     def _parse_author(self, message):
         a = message.getElementsByTagName('author')
@@ -496,6 +501,14 @@ class RevisionInfo:
         a[0].normalize()
         assert(len(a[0].childNodes) == 1)
         return a[0].childNodes[0].data
+
+    def _parse_commit_log(self, message):
+        l = message.getElementsByTagName('msg')
+        l[0].normalize()
+        try:
+            return l[0].childNodes[0].data
+        except:
+            return ''
 
     def _parse_revision_number(self, message):
         return int(message.getAttribute('revision'))
@@ -554,6 +567,35 @@ class ModifiedPath:
     def get_path(self):
         return self._path
 
+
+
+
+
+class AuthorsByCommitLogSize(TableStatistic):
+    """Specific statistic - show table author -> commit log, sorted
+    by commit log size.
+    """
+    def __init__(self, config, revision_data):
+        """Generate statistics out of revision data.
+        """
+        TableStatistic.__init__(self, 'Authors by total number of commits')
+        assert(isinstance(revision_data, RevisionData))
+
+        abc = {}
+        
+        for rv in revision_data.get_revisions():
+            author = rv.get_author()
+            log = rv.get_commit_log()
+            if not abc.has_key(author): abc[author] = len(log)
+            else: abc[author] += len(log)
+
+        data = [(a, abc[a]) for a in abc.keys()]
+        data.sort(lambda x,y: cmp(y[1], x[1]))
+
+        self._data = data
+
+    def column_names(self):
+        return ('Author', 'Size of commit\'s log]')
 
 
 if __name__ == '__main__':
