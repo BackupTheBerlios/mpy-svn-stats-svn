@@ -18,7 +18,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
-"""\
+"""
 mpy-svn-stats is a simple statistics generator (log analyser) for
 Subversion repositories.
 
@@ -27,12 +27,15 @@ It aims to be easy to use, but still provide some interesting information.
 It's possible that the profile of the generated stats will promote
 rivalisation in the project area.
 
-Usage: mpy-svn-stats [-h] [-o dir] <url>
+Usage::
 
- -h      --help              - print this help message
- -o      --output-dir        - set output directory
-         --svn-binary        - use different svn client instead of ``svn''
- url - repository url
+    mpy-svn-stats [-h] [-o dir] <url>
+
+    -h      --help              - print this help message
+    -o      --output-dir        - set output directory
+    -i      --input             - input log file, no svn is called, - for stdin
+            --svn-binary        - use different svn client instead of ``svn''
+    <url>                       - repository url
 
 Authors: Maciej Pietrzak, Joanna Chmiel, Marcin Mankiewicz
 MPY SVN STATS is licensed under GPL. See http://www.gnu.org/copyleft/gpl.html
@@ -41,21 +44,22 @@ Project homepage is http://mpy-svn-stats.berlios.de/
 You can contact authors by email at mpietrzak@users.berlios.de
 """
 
-import sys
-import os
-import time
+__docformat__ = 'restructuredtext'
+
+import sys,os,time
 import getopt
 import time, datetime
 import xml.dom
 import locale
 import math
+import datetime
 from cgi import escape
 from xml.dom.minidom import parseString
 
 
 # conditional imports
 try:
-    import Image, ImageDraw
+    import Image, ImageDraw, ImageFont
     _have_pil = True
 except:
     _have_pil = False
@@ -64,6 +68,7 @@ except:
 # constants
 week_seconds = 7 * 24 * 60 * 60
 month_seconds = 30 * 24 * 60 * 60
+year_seconds = 365.25 * 24 * 60 * 60
 
 def main(argv):
     config = Config(argv)
@@ -72,16 +77,26 @@ def main(argv):
 
     stats = AllStatistics(config)
     stats.configure(config)
+    
+    print "getting data"
     xmldata = get_data(config)
+    print "done"
     
     run_time_start = time.time()
     
+    print "parsing data"
     revision_data = RevisionData(config.get_repository_url(), parseString(xmldata))
+    print "done"
+
+    print "calculating stats"
     stats.calculate(revision_data)
+    print "done"
     
     run_time_end = time.time()
     
+    print "writing data"
     stats.write(run_time=(run_time_end - run_time_start)) 
+    print "done"
 
     print "Have %d stats objects, %d of them are wanted." % (
         stats.count_all(),
@@ -89,7 +104,29 @@ def main(argv):
 
 def get_data(config):
     """Get the analysis source data.
+    Data source definition is in config variable.
+    Data is obtained either by calling external svn
+    binary or by reading from standard input.
+    TODO: use python bindings to subversion (although
+    it does not increase neither functionality nor
+    security of script, so this is not critical).
     """
+    if config.input_file:
+        xml_data = get_data_from_file(config)
+    else:
+        xml_data = get_data_from_svn_binary(config)
+    return xml_data
+
+def get_data_from_file(config):
+    """Read XML data (bytes) from file."""
+    fname = config.input_file
+    if fname == '-':
+        f = sys.stdin
+    else:
+        f = file(fname)
+    return f.read()
+
+def get_data_from_svn_binary(config):
     svn_binary = config.get_svn_binary()
     svn_repository = config.get_repository_url()
     assert(svn_binary)
@@ -97,11 +134,7 @@ def get_data(config):
     command = '%s -v --xml log %s' % (svn_binary, svn_repository)
     print 'running command: "%s"' % command
     f = os.popen(command)
-    xml_data = f.read()
-    w = f.close()
-    if w is not None:
-        raise 'errors'
-    return xml_data    
+    return f.read()
 
 def generate_stats(config, data):
     try:
@@ -115,22 +148,24 @@ def _create_output_dir(dir):
     """Create output dir."""
     if not os.path.isdir(dir):
         os.mkdir(dir)
-        
 
 class Config:
     """This class contains all data about configuration, environment
     and parameters.
     Statistics' may choose to tune their parameters or even disable
-    themselves based on these informations.
+    themselves based on this information.
     """
 
     def __init__(self, argv):
+        """Init based on argv from command line.
+        """
         self._argv = argv
         self._broken = False
         self._repository = None
         self._want_help = False
         self._error_message = None
         self._svn_binary = 'svn'
+        self.input_file = None
         self._output_dir = 'mpy-svn-stats'
 
         self._enabled_stats = []
@@ -145,10 +180,11 @@ class Config:
         try:
             optlist, args = getopt.getopt(
                 argv[1:],
-                'ho:e:',
+                'ho:i:e:',
                 [
                     'help', 
                     'output-dir=',
+                    'input=',
                     'svn-binary=',
                     'enable='
                 ])
@@ -156,8 +192,8 @@ class Config:
             self._broken = True
             self._error_message = str(e)
             return None
-        print "optlist: %s" % str(optlist)
-        print "args: %s" % str(args)
+        #print "optlist: %s" % str(optlist)
+        #print "args: %s" % str(args)
 
         optdict = {}
 
@@ -169,17 +205,23 @@ class Config:
             return None
         if optdict.has_key('--with-diff-stats'):
             self._stats_to_generate.update('author_by_diff_size')
-        if len(args) != 1:
-            self._broken = True
-            self._repository = None
-            return None
-
-        self._repository = args[0]
-
+        
         for key,value in optlist:
             if key == '-o': self._output_dir = value
             elif key == '--output-dir': self._output_dir = value
             elif key == '--svn-binary': self._svn_binary = value
+            elif key == '-i' or key == '--input': self.input_file = value
+
+        if self.input_file is None:
+            if len(args) != 1:
+                self._broken = True
+                self._repository = None
+                return None
+
+            self._repository = args[0]
+        else:
+            self._repository = None
+
 
         # by default we will generate stats from the beginning to now
         self.start_date = None
@@ -198,13 +240,16 @@ class Config:
         return self._repository
 
     def get_svn_binary(self):
-        return self._svn_binary
+        if self.input_file:
+            return None
+        else:
+            return self._svn_binary
 
     def get_output_dir(self):
         return self._output_dir
 
-    def want_statistic(self, type):
-        """Test wherher statistic of type type is wanted.
+    def want_statistic(self, statistic_type):
+        """Test whether statistic of type statistic_type is wanted.
         """
         if self._generate_all: return True
         else: return type in self._stats_to_generate
@@ -484,6 +529,9 @@ class GraphStatistic(Statistic):
     """
 
     requires_graphics = True
+
+    _x_axis_is_time = True
+    """Default, since most graphs are time based."""
     
     def __init__(self, config, name, title):
         Statistic.__init__(self, config, name, title)
@@ -501,6 +549,25 @@ class GraphStatistic(Statistic):
 
     def get_y_range(self):
         return (self._min_y, self._max_y)
+
+    def x_labels(self):
+        """Return dictionary of labels for
+        horizontal axis of graphs.
+        Keys should be values that are not
+        less than self._min_x and not
+        greater than _max_x.
+        Values are strings that should
+        be attached to axis.
+
+        Default implementation calls labels_for_time_span
+        if self._x_axis_is_time is True, which is default.
+            """
+        if self._x_axis_is_time:
+            return labels_for_time_span(
+                datetime.datetime.fromtimestamp(self._min_x),
+                datetime.datetime.fromtimestamp(self._max_x))
+        else:
+            return {}
 
 
 class CommitsByWeekGraphStatistic(GraphStatistic):
@@ -611,7 +678,6 @@ class CommitsByWeekPerUserGraphStatistic(GraphStatistic):
         users = self._get_users(revision_data)
         self.series_names = users
         self._make_colors(users)
-
         
         week_in_seconds = 7 * 24 * 60 * 60 * 1.0
     
@@ -726,10 +792,12 @@ class GroupStatistic(Statistic):
 class AllStatistics(GroupStatistic):
     """This is a special type of group statistic - it
     is created at startup. It should create
-    all statistics objects tree.
+    whole statistics objects tree.
     
     After that, objects are queried whether they
-    are to be calculated."""
+    are to be calculated, and then written
+    out using writers.
+    """
 
     def __init__(self, config):
         """This constructor takes no parameters.
@@ -768,12 +836,12 @@ class SimpleFunctionGroup(GroupStatistic):
     """A statistic for measuring one function of revision
     (for example: commit count, changed paths, log message size etc).
     Includes:
-        - authors sorted by value for:
-            - total repo life
-            - last month
-            - last 7 days
-        - graph for authors
-        - graoh for function's value
+     - authors sorted by value for:
+       * total repo life
+       * last month
+       * last 7 days
+     - graph for authors
+     - graoh for function's value
     """
 
     class SimpleTable(TableStatistic):
@@ -1369,18 +1437,24 @@ class GraphImageHTMLWriter(HTMLWriter):
     That is: axis max, axis min, axis label,
     argument -> value pairs that define function.
     Also it may contain type in future releases.
+
+    Fields include:
+     - _statistic - parent statistic (the one data
+       comes from)
     """
+
     def __init__(self, statistic):
         """Initialise instance. Name will be used for
         image filename."""
         assert isinstance(statistic, GraphStatistic)
         self._statistic = statistic
+        self.font = ImageFont.load_default()
 
     def configure(self, config):
         """Configure Graph Image HTML Writer."""
         self._image_width = 600
-        self._image_height = 300
-        self._margin_bottom = 50
+        self._image_height = 400
+        self._margin_bottom = 125
         self._margin_top = 20
         self._margin_left = 50
         self._margin_right = 20
@@ -1399,7 +1473,7 @@ class GraphImageHTMLWriter(HTMLWriter):
         draw = ImageDraw.Draw(im)
 
         self._draw_axes(im, draw)
-
+        self._draw_axes_labels(im, draw)
         self._paint_content(im, draw)
 
         del draw
@@ -1427,6 +1501,12 @@ class GraphImageHTMLWriter(HTMLWriter):
         return to_tuple
 
     def _graph_to_image(self, point):
+        """Convert position from
+        theoretical (data) coordinates to
+        image coordinates.
+        Points are tuples of doubles.
+        TODO: rewrite, it's too long.
+        """
         gx = float(point[0])
         gy = float(point[1])
         point = (gx, gy)
@@ -1468,6 +1548,7 @@ class GraphImageHTMLWriter(HTMLWriter):
         self._draw_horizontal_axis_title(image, draw)
         self._draw_vertical_axis_title(image, draw)
 
+
     def _draw_horizontal_axis(self, image, draw):
         start_x = self._margin_left
         start_y = self._image_height - self._margin_bottom
@@ -1492,30 +1573,28 @@ class GraphImageHTMLWriter(HTMLWriter):
 
     def _draw_horizontal_axis_title(self, image, draw):
         text = self._statistic.horizontal_axis_title()
-        (text_width, text_height) = draw.textsize(text)
+        (text_width, text_height) = draw.textsize(text, font=self.font)
 
         corner_x = self._image_width - self._margin_right
         corner_y = self._image_height - self._margin_bottom
 
-        pos_x = corner_x - text_width - 10
-        pos_y = corner_y + 10
+        pos_x = corner_x - text_width
+        pos_y = corner_y - 15
         
-        draw.text((pos_x, pos_y), text, fill='black')
+        draw.text((pos_x, pos_y), text, fill='black', font=self.font)
 
     def _draw_vertical_axis_title(self, image, draw):
-
         text_im_width = 300
         text_im_height = 200
 
-        textim = Image.new('RGB',
+        textim = Image.new('RGBA',
             (text_im_width, text_im_height), 'white')
         textdraw = ImageDraw.Draw(textim)
     
         text = self._statistic.vertical_axis_title()
-        (text_width, text_height) = textdraw.textsize(text)
+        (text_width, text_height) = textdraw.textsize(text, font=self.font)
 
-        textdraw.text((0,0), text, fill='black')
-
+        textdraw.text((0,0), text, fill='black', font=self.font)
 
         del textdraw
 
@@ -1536,8 +1615,43 @@ class GraphImageHTMLWriter(HTMLWriter):
             )
         )
         
-
         del textim
+
+    def _draw_axes_labels(self, image, draw):
+        labels = self._statistic.x_labels()
+        if len(labels) == 0: return
+        #print "%s: have %d labels" % (self, len(labels))
+        for label_datetime, label in labels.iteritems():
+            label_position = time.mktime(label_datetime.timetuple())
+            label_text = label.text
+            position = self._graph_to_image( (label_position, 0) )
+            
+            #print " putting '%s' at %s" % (label_text, position)
+            self._draw_text(image, draw, (position[0], position[1] + 4), label_text,
+                angle=90)
+            draw.line(
+                (int(position[0]), int(position[1] - 4), int(position[0]), int(position[1] + 2)),
+                'black')
+
+    def _draw_text(self, im, draw, position, text, fill='black', angle=0):
+        """Create rotated text. This must be done
+        by creating temp image, drawing text on it,
+        rotating it and then copying it to the original
+        image.
+        """
+        textsize = draw.textsize(text)
+        tim = Image.new('RGBA', textsize, (0,0,0,0))
+        tdraw = ImageDraw.Draw(tim)
+
+        tdraw.text( (0,0), text, fill=fill, font=self.font)
+        del tdraw
+
+        tim = tim.rotate(-90)
+
+        #print position
+        im.paste(tim, (int(position[0] - textsize[1] / 2), int(position[1])), tim)
+
+        del tim
         
     def output(self):
         """Outputting."""
@@ -1654,7 +1768,10 @@ class RevisionData:
         return self._revisions[len(self._revisions)-1]
 
     def get_repository_url(self):
-        return self._repository_url
+        if self._repository_url:
+            return self._repository_url
+        else:
+            return "unknown"
 
     def __len__(self):
         return len(self._revisions)
@@ -1868,6 +1985,163 @@ class AuthorsByDiffSize(TableStatistic):
     def column_names(self):
         return ('Author', 'Size of diffs', 'Number of lines in diffs')
 
+
+labels_for_time_span_cache = {}
+
+def labels_for_time_span(start_time, end_time, max_labels=20):
+
+    if labels_for_time_span_cache.has_key((start_time, end_time, max_labels)):
+        return labels_for_time_span_cache[(start_time, end_time, max_labels)]
+
+    labels = {}
+    for unit in RoundedTimeIterator.units:
+
+        units_labels = {}
+        for t in RoundedTimeIterator(start_time, end_time, unit):
+            units_labels[t] = GraphTimeLabel(t, unit)
+
+        labels_candidate = {}
+        labels_candidate.update(units_labels)
+        labels_candidate.update(labels)
+
+        if len(labels_candidate) > max_labels:
+            break
+        else:
+            labels = labels_candidate
+
+    labels_for_time_span_cache[(start_time, end_time, max_labels)] = labels
+    return labels
+
+class GraphTimeLabel(object):
+    """Handle graph's time labels.
+    Used as a value in labels dict.
+    Actually, created to have "weight" or
+    "importance" attached to label - so
+    we can draw bigger strokes with years,
+    and smaller with days.
+    """
+    def __init__(self, label_datetime, unit, weight=None):
+    	"""Initialise instance.
+	Weight means "importance" of the label, for example
+	year is more important than month and gets bigger
+	"stroke" or "tick" on graphs axis.
+
+	If weight is not specified as parameter it is taken from
+	units index from RoundedTimeIterator.
+	"""
+        self.datetime = label_datetime
+        tt = label_datetime.timetuple()
+
+        if tt[3] == 0 and tt[4] == 0 and tt[5] == 0:
+            # only y-m-d
+            self.text = '%04d-%02d-%02d' % (tt[0], tt[1], tt[2])
+        else:
+            # full
+            self.text = '%04d-%02d-%02d %02d:%02d:%02d' % tuple(tt[0:6])
+
+        if weight:
+            self.weight = weight
+        else:
+            self.weight = list(RoundedTimeIterator.units).index(unit)
+
+        self.unit = unit
+
+    def __str__(self):
+        return self.text()
+    
+
+class RoundedTimeIterator(object):
+    """Provide object, that iterates over time period by some fuzzy "round"
+    time intervals like months, weeks etc.
+
+    TODO: Write doctest or unit test for this to define behaviour strictly.
+    Then, rewrite again. Problem with this is that I'm not sure what results it
+    should give in first place.
+    """
+
+    _unit_settings = {
+        'decade': (10, 0),
+        'fiveyears': (5, 0),
+        'twoyears': (2, 0),
+        'year': (1, 0),
+        'sixmonths': (6, 1),
+        'quarter': (3, 1),
+        'month': (1, 1),
+        'day': (1, 2),
+        'hour': (1, 3),
+        'minute': (1, 4),
+        'second': (1, 5),
+    }
+
+    
+    units = (
+        'decade',
+        'fiveyears',
+        'twoyears',
+        'year',
+        'sixmonths',
+        'quarter',
+        'month',
+        'day',
+        'hour',
+        'minute',
+        'second'
+    )
+
+    def __init__(self, start_datetime, end_datetime, unit):
+        """Create object.
+        unit is a string - name of unit.
+        start_datetime and end_datetime are datetime.datetime objects.
+        """
+        if unit not in self.units:
+            raise Exception('illegal unit value: %s' % repr(unit))
+        assert isinstance(start_datetime, datetime.datetime)
+        assert isinstance(end_datetime, datetime.datetime)
+        self.unit = unit
+        self.start_datetime = start_datetime
+        self.end_datetime = end_datetime
+        self.first = True
+        self.current_datetime = start_datetime
+        
+
+    def _find_next(self, current_datetime):
+        return self._increase_date(self._reset_date(current_datetime))
+
+    def _increase_date(self, date):
+        tl = list(date.timetuple())
+        ch = self._unit_settings[self.unit]
+        tl[ch[1]] += ch[0]
+        nts = time.mktime(tuple(tl))
+        return datetime.datetime.fromtimestamp(nts, date.tzinfo)
+
+    def _reset_date(self, date):
+        tl = list(date.timetuple())
+        ch = self._unit_settings[self.unit]
+        default_values = (0, 1, 1, 0, 0, 0)
+        for i in range(ch[1] + 1, len(default_values)):
+            tl[i] = default_values[i]
+        
+        return datetime.datetime.fromtimestamp(
+            time.mktime(tuple(tl)), date.tzinfo)
+    
+    def next(self):
+    	"""Please don't read this ;)
+        """
+        if self.first and self.current_datetime == self._reset_date(self.current_datetime):
+            # dont increase
+            pass
+        else:
+            self.current_datetime = self._find_next(self.current_datetime)
+
+        self.first = False
+        
+        if self.current_datetime >= self.start_datetime and self.current_datetime < self.end_datetime:
+            return self.current_datetime
+        else:
+            raise StopIteration()
+    
+    def __iter__(self):
+        return self
 
 if __name__ == '__main__':
     locale.setlocale(locale.LC_ALL)
