@@ -12,8 +12,9 @@ rivalisation in the project area.
 
 Usage: mpy-svn-stats [-h] <url>
 
- * -h  - print this help message
- * url - repository url
+ -h      --help              - print this help message
+ -o      --output-dir        - set output directory
+ url - repository url
 """
 
 import xml.dom
@@ -38,6 +39,8 @@ def get_data(config):
     """
     svn_binary = config.get_svn_binary()
     svn_repository = config.get_repository_url()
+    assert(svn_binary)
+    assert(svn_repository)
     command = '%s -v --xml log %s' % (svn_binary, svn_repository)
     print 'running command: "%s"' % command
     f = os.popen(command)
@@ -48,7 +51,11 @@ def get_data(config):
     return xml_data    
 
 def generate_stats(config, data):
-    dom = parseString(data)
+    try:
+        dom = parseString(data)
+    except Exception, x:
+        print "failed to parse:\n%s\n" % data
+        raise x
     return Stats(config, dom)
 
 def output_stats(config, stats):
@@ -83,16 +90,16 @@ class Config:
         self._generate_all = True
         self._stats_to_generate = []
         self._svn_binary = 'svn'
-        self._outpur_dir = 'mpy-svn-stats'
+        self._output_dir = 'mpy-svn-stats'
 
         try:
-            optlist, args = getopt.getopt(argv[1:], 'h', ['help'])
+            optlist, args = getopt.getopt(argv[1:], 'ho:', ['help', 'output-dir'])
         except getopt.GetoptError, e:
             self._broken = True
             self._error_message = str(e)
             return None
-#        print "optlist: %s" % str(optlist)
-#        print "args: %s" % str(args)
+        print "optlist: %s" % str(optlist)
+        print "args: %s" % str(args)
         optdict = {}
         for k,v in optlist: optdict[k] = v
 #        print "optdict: %s" % str(optdict)
@@ -103,8 +110,13 @@ class Config:
             self._broken = True
             self._repository = None
             return None
-        else:
-            self._repository = args[0]
+
+        self._repository = args[0]
+
+        for key,value in optlist:
+            if key == '-o': self._output_dir = value
+            elif key == '--output-dir': self._output_dir = value
+        
 
     def is_not_good(self):
         return self._broken
@@ -122,7 +134,7 @@ class Config:
         return self._svn_binary
 
     def get_output_dir(self):
-        return self._outpur_dir
+        return self._output_dir
 
     def want_statistic(self, type):
         """Test wherher statistic of type type is wanted.
