@@ -595,7 +595,7 @@ class AuthorsByCommitLogSize(TableStatistic):
         self._data = data
 
     def column_names(self):
-        return ('Author', 'Size of commit\'s log')
+        return ('Author', 'Size of log messages')
 
 
 if __name__ == '__main__':
