@@ -108,6 +108,7 @@ def output_stats(config, stats):
                 font-style: italic;
             }
         </style>
+        </head>
         <body>
             <h1>%(title)s</h1>
         """ % {'title':'Stats for %s' % config.get_repository_url()})
