@@ -48,6 +48,7 @@ import getopt
 import time, datetime
 import xml.dom
 import locale
+import math
 from cgi import escape
 from xml.dom.minidom import parseString
 
@@ -520,14 +521,15 @@ class CommitsByWeekGraphStatistic(GraphStatistic):
         self._max_x = revision_data.get_last_revision().get_date()
         self._min_y = 0
         self._max_y = 0
-        self._values = {}
+
+        values = {}
 
         while start_of_week < revision_data.get_last_revision().get_date():
             commits = revision_data.get_revisions_by_date(start_of_week, end_of_week)
             y = len(commits)
             fx = float(start_of_week+(end_of_week - start_of_week)/2)
             fy = float(y) * float(end_of_week - start_of_week) / float(week_in_seconds)
-            self._values[fx] = fy
+            values[fx] = fy
 
             if y > self._max_y: self._max_y = y
 
@@ -535,6 +537,112 @@ class CommitsByWeekGraphStatistic(GraphStatistic):
             end_of_week = start_of_week + week_in_seconds
             if end_of_week > revision_data.get_last_revision().get_date():
                 end_of_week = revision_data.get_last_revision().get_date()
+        
+        self.series_names = ['number_of_commits']
+        self._values = {}
+        self._values['number_of_commits'] = values
+        self.colors = {}
+        self.colors['number_of_commits'] = (0, 0, 0)
+    
+    def horizontal_axis_title(self):
+        return "Time"
+    
+    def vertical_axis_title(self):
+        return "Number of commits"
+
+
+class CommitsByWeekPerUserGraphStatistic(GraphStatistic):
+    """Show how many commits were made by most active
+    users."""
+
+    def __init__(self, config):
+        """Initialise."""
+        self.number_of_users_to_show = 7
+        GraphStatistic.__init__(self, config,
+            "commits_by_week_per_user_graph",
+            "Number of commits in week made by most active users")
+
+    def _get_users(self, revision_data):
+        """Find users to be included in graph."""
+        return revision_data.get_users_sorted_by_commit_count()[:self.number_of_users_to_show]
+
+    def _make_colors(self, users):
+        """Create different colors for each values."""
+        saturation = 1.0
+        brightness = 0.75
+        self.colors = {}
+        n = 0
+        for user in self.series_names:
+            
+            hue = float(n) / float(len(self.series_names))
+            n += 1
+
+            assert hue >= 0.0 and hue <= 1.0
+
+            i = int(hue * 6.0)
+            f = hue * 6.0 - float(i)
+            p = brightness * (1.0 - saturation)
+            q = brightness * (1.0 - saturation * f)
+            t = brightness * (1.0 - saturation * (1.0 - f))
+
+            o = {
+                0: (brightness, t, p),
+                1: (q, brightness, p),
+                2: (p, brightness, t),
+                3: (p, q, brightness),
+                4: (t, p, brightness),
+                5: (brightness, p, q)
+            }
+
+            (r, g, b) = o[i]
+
+            assert r >= 0.0 and r <= 1.0
+            assert g >= 0.0 and g <= 1.0
+            assert b >= 0.0 and b <= 1.0
+            
+            self.colors[user] = (int(r*256.0), int(g*256.0), int(b*256.0))
+    
+    def calculate(self, revision_data):
+        """Calculate statistic."""
+        assert len(self._wanted_output_modes) > 0
+
+        users = self._get_users(revision_data)
+        self.series_names = users
+        self._make_colors(users)
+
+        
+        week_in_seconds = 7 * 24 * 60 * 60 * 1.0
+    
+        start_of_week = revision_data.get_first_revision().get_date()
+        end_of_week = start_of_week + week_in_seconds
+
+        self._min_x = revision_data.get_first_revision().get_date()
+        self._max_x = revision_data.get_last_revision().get_date()
+        self._min_y = 0
+        self._max_y = 0
+        self._values = {}
+
+        for user in users:
+            self._values[user] = {}
+
+        i = 1
+        while start_of_week < revision_data.get_last_revision().get_date():
+            for user in users:
+                commits = revision_data.get_revisions_by_date(start_of_week, end_of_week)
+                y = len([rv for rv in revision_data.revisions_by_users[user] if (
+                    (rv.get_date() > start_of_week and rv.get_date() < end_of_week))])
+                fx = float(start_of_week+(end_of_week - start_of_week)/2)
+                fy = float(y) * float(end_of_week - start_of_week) / float(week_in_seconds)
+
+                self._values[user][fx] = fy
+
+                if y > self._max_y: self._max_y = y
+
+            start_of_week += week_in_seconds
+            end_of_week = start_of_week + week_in_seconds
+            if end_of_week > revision_data.get_last_revision().get_date():
+                end_of_week = revision_data.get_last_revision().get_date()
+            i += 1
     
     def horizontal_axis_title(self):
         return "Time"
@@ -635,7 +743,6 @@ class AllStatistics(GroupStatistic):
         self._want_output_mode('html')
 
 
-
 class AuthorsByCommitsGroup(GroupStatistic):
     """This class defines group of statistic that shows authors with
     their commit counts."""
@@ -650,6 +757,7 @@ class AuthorsByCommitsGroup(GroupStatistic):
         self.append(AuthorsByCommits(config,
             config.end_date - week_seconds, config.end_date,
             title='Authors by commits - last week'))
+        self.append(CommitsByWeekPerUserGraphStatistic(config))
         self._set_writer('html', GroupStatisticHTMLWriter(self))
         self._want_output_mode('html')
 
@@ -824,6 +932,23 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
                 border-style: solid;
                 margin-bottom: 40pt;
                 border-color: lightgray;
+            }
+
+            table.legend tr {
+            }
+
+            table.legend td.name {
+                border-width: 1px 0px 1px 1px;
+                border-style: solid;
+                border-color: black;
+                padding: 0.2em 1em;
+            }
+
+            table.legend td.color {
+                border-width: 1px 1px 1px 0px;
+                border-style: solid;
+                border-color: black;
+                width: 4em;
             }
             
         </style>
@@ -1021,11 +1146,10 @@ class GeneralStatisticsHTMLWriter(HTMLWriter):
 class GraphImageHTMLWriter(HTMLWriter):
     """A class that writes graphs to image files.
     Basically, a GraphStatistic contains data that
-    make possible to draw a graph.
+    makes it possible to draw a graph.
     That is: axis max, axis min, axis label,
     argument -> value pairs that define function.
     Also it may contain type in future releases.
-    Now, lets just draw plots.
     """
     def __init__(self, statistic):
         """Initialise instance. Name will be used for
@@ -1036,7 +1160,7 @@ class GraphImageHTMLWriter(HTMLWriter):
     def configure(self, config):
         """Configure Graph Image HTML Writer."""
         self._image_width = 600
-        self._image_height = 200
+        self._image_height = 300
         self._margin_bottom = 50
         self._margin_top = 20
         self._margin_left = 50
@@ -1057,23 +1181,30 @@ class GraphImageHTMLWriter(HTMLWriter):
 
         self._draw_axes(im, draw)
 
-        keys = self._statistic._values.keys()
-        keys.sort()
-
-        last_pair = (None, None)
-        for key in keys:
-            value = self._statistic._values[key]
-            last_pair = self._plot(draw, last_pair, (key, value))
+        self._paint_content(im, draw)
 
         del draw
+        self._save(im)
+
+    def _save(self, im):
         im.save(self.get_image_fname())
 
-    def _plot(self, draw, from_tuple, to_tuple):
+    def _paint_content(self, im, draw):
+        for k,values in self._statistic._values.iteritems():
+            keys = values.keys()
+            keys.sort()
+            color = self._statistic.colors[k]
+
+            last_pair = (None, None)
+            for key in keys:
+                value = values[key]
+                last_pair = self._plot(draw, last_pair, (key, value), color)
+
+    def _plot(self, draw, from_tuple, to_tuple, color='black'):
         if from_tuple != (None, None):
             (imx1, imy1) = self._graph_to_image(from_tuple)
             (imx2, imy2) = self._graph_to_image(to_tuple)
-
-            draw.line((imx1, imy1, imx2, imy2), 'black')
+            draw.line((imx1, imy1, imx2, imy2), color)
         return to_tuple
 
     def _graph_to_image(self, point):
@@ -1202,10 +1333,55 @@ class GraphImageHTMLWriter(HTMLWriter):
         """ % {
             'image_src': self.get_image_html_src()
         }
+
+        if len(self._statistic.colors.keys()) > 1:
+            r += self._legend()
+        
         r += self._standard_statistic_footer()
 
         return r
 
+    def _legend(self):
+        o = ''
+        i = 0
+        cols = 3
+        colors = self._statistic.colors
+        names = self._statistic.series_names
+
+        o += "<table class=\"legend\">\n"
+
+        while True:
+            o += "  <tr>\n"
+            for col_num in range(0, cols):
+
+                if i < len(colors.keys()):
+                    
+                    name = names[i]
+                    (r,g,b) = colors[name]
+
+
+                    color = '#%s%s%s' % (
+                        hex(r)[2:].zfill(2),
+                        hex(g)[2:].zfill(2),
+                        hex(b)[2:].zfill(2))
+                
+                    o += "    <td class=\"name\">%s</td>\n<td class=\"color\" style=\"background-color: %s\">&nbsp;</td>\n" % (
+                        name,
+                        color)
+
+                else:
+                    o += "    <td></td>\n<td>\n</td>"
+
+                i += 1
+
+            o += "  </tr>\n"
+
+            if i >= len(colors.keys()):
+                break
+            
+        o += "</table>"
+        return o
+            
 
 class RevisionData:
     """Data about all revisions."""
@@ -1228,8 +1404,26 @@ class RevisionData:
         for rv in self._revisions:
             self._revisions_by_keys[rv.get_revision_number()] = rv
 
-        self._revisions_keys = self._revisions_by_keys.keys().sort()
         self._revisions.sort(lambda r1,r2: cmp(r1.get_revision_number(), r2.get_revision_number()))
+
+        self._generate_user_data()
+
+    def _generate_user_data(self):
+        self.users = []
+        self.revisions_by_users = {}
+
+        for rv in self._revisions:
+            user = rv.get_author()
+            if not user in self.users:
+                self.users.append(user)
+                self.revisions_by_users[user] = []
+            self.revisions_by_users[user].append(rv)
+
+        self.users_sorted_by_revision_count = self.users
+        self.users_sorted_by_revision_count.sort(lambda u1, u2: cmp(len(self.revisions_by_users[u2]), len(self.revisions_by_users[u1])))
+
+    def get_users_sorted_by_commit_count(self):
+        return self.users_sorted_by_revision_count
 
     def get_revision(self, number):
         return self._revisions_by_keys[number]
@@ -1355,7 +1549,7 @@ class RevisionInfo:
 
     def get_revision_number(self):
         return self._revision_number
-    
+
 
 class ModifiedPath:
     def __init__(self, action, path):
