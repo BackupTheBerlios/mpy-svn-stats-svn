@@ -733,6 +733,10 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
             .topLink a:hover {
                 color: gray;
             }
+
+            a.menuLink:link, a.menuLink:active, a.menuLink:visited {
+                color: blue;
+            }
             
         </style>
     </head>
@@ -775,7 +779,7 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
 
             r += "</ul>\n</li>\n"
         else:
-            r += "<li><a href=\"#%s\">%s</a></li>\n" % (
+            r += "<li><a class=\"menuLink\" href=\"#%s\">%s</a></li>\n" % (
                 statistic.name(),
                 statistic.title())
         return r
