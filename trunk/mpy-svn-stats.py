@@ -233,7 +233,7 @@ class Stats:
         revisions = RevisionData(dom)
         if config.want_statistic('authors_by_commits'):
             self._statistics.append(AuthorsByCommits(config, revisions))
-        if config.want_statistic('commits_by_time'):
+        if config.want_statistic('commits_by_time') and _have_pil:
             self._statistics.append(CommitsByTimeGraphStatistic(config, revisions))
         print "have %d revisions" % len(revisions)
 
