@@ -51,12 +51,18 @@ import locale
 from cgi import escape
 from xml.dom.minidom import parseString
 
+
 # conditional imports
 try:
     import Image, ImageDraw
     _have_pil = True
 except:
     _have_pil = False
+
+
+# constants
+week_seconds = 7 * 24 * 60 * 60
+month_seconds = 30 * 24 * 60 * 60
 
 def main(argv):
     config = Config(argv)
@@ -159,7 +165,11 @@ class Config:
             if key == '-o': self._output_dir = value
             elif key == '--output-dir': self._output_dir = value
             elif key == '--svn-binary': self._svn_binary = value
-        
+
+        # by default we will generate stats from the beginning to now
+        self.start_date = None
+        self.end_date = time.time()
+
 
     def is_not_good(self):
         return self._broken
@@ -315,10 +325,24 @@ class AuthorsByCommits(TableStatistic):
     """Specific statistic - show table author -> commit count sorted
     by commit count.
     """
-    def __init__(self, config):
+    def __init__(self, config, start_date=None, end_date=None, id=None, title=None):
         """Generate statistics out of revision data.
         """
-        TableStatistic.__init__(self, config, 'authors_by_number_of_commits', 'Authors by total number of commits')
+        if id is None:
+            id = "authors_by_number_od_commits"
+            if start_date:
+                id += "_fromdate_" + str(int(start_date))
+            if end_date:
+                id += "_todate_" + str(int(end_date))
+        if title is None:
+            title = "Authors by total number of commits"
+            if start_date:
+                title += " from " + str(start_date)
+            if end_date:
+                title += " to " + str(end_date)
+        TableStatistic.__init__(self, config, id, title)
+        self.start_date = start_date
+        self.end_date = end_date
 
     def column_names(self):
         return ('Author', 'Total number of commits', 'Percentage of total commit count')
@@ -337,11 +361,17 @@ class AuthorsByCommits(TableStatistic):
         """
         assert isinstance(revision_data, RevisionData), ValueError(
             "Expected RevisionData instance, got %s", repr(revision_data)
-            )
+        )
 
         abc = {}
 
         for rv in revision_data.get_revisions():
+            if self.start_date:
+                if rv.get_date() < self.start_date:
+                    continue
+            if self.end_date:
+                if rv.get_date() > self.end_date:
+                    continue
             author = rv.get_author()
             if not abc.has_key(author): abc[author] = 1
             else: abc[author] += 1
@@ -548,11 +578,30 @@ class AllStatistics(GroupStatistic):
         """
         GroupStatistic.__init__(self, config, "mpy_svn_stats", "MPY SVN Statistics")
         self.append(GeneralStatistics(config))
-        self.append(AuthorsByCommits(config))
+#        self.append(AuthorsByCommits(config))
+        self.append(AuthorsByCommitsGroup(config))
         self.append(AuthorsByChangedPaths(config))
         self.append(AuthorsByCommitLogSize(config))
         self.append(CommitsByWeekGraphStatistic(config))
         self._set_writer('html', TopLevelGroupStatisticHTMLWriter(self))
+        self._want_output_mode('html')
+
+
+class AuthorsByCommitsGroup(GroupStatistic):
+    """This class defines group of statistic that shows authors with
+    their commit counts."""
+
+    def __init__(self, config):
+        """Create group contents."""
+        GroupStatistic.__init__(self, config, "authors_by_commits_group", "Authors by commits")
+        self.append(AuthorsByCommits(config))
+        self.append(AuthorsByCommits(config,
+            config.end_date - month_seconds, config.end_date,
+            title='Authors by commits - last month'))
+        self.append(AuthorsByCommits(config,
+            config.end_date - week_seconds, config.end_date,
+            title='Authors by commits - last week'))
+        self._set_writer('html', GroupStatisticHTMLWriter(self))
         self._want_output_mode('html')
 
 
@@ -578,6 +627,10 @@ class HTMLWriter(StatisticWriter):
     def _standard_statistic_footer(self):
         """Make all statistic header look the same."""
         return ""
+
+    def configure(self, config):
+        self.is_configured = True
+
 
 class GroupStatisticHTMLWriter(HTMLWriter):
     """Class for writing group statistics (abstract)."""
@@ -1179,7 +1232,6 @@ class RevisionInfo:
         return modified_paths
 
     def _parse_date(self, message):
-
         date_element = message.getElementsByTagName('date')[0]
         isodate = self._get_element_contents(date_element)
         return time.mktime(time.strptime(isodate[:19], '%Y-%m-%dT%H:%M:%S'))
