@@ -9,7 +9,7 @@ Here are some of my thoughts:
 1) Generally, statistics are abstract, each statistic needs a
 writer. To generate HTML we need HTML writer, to create LaTeX or
 something else, another writer is required. Statistic
-contains data, that ready to be written out, but no presentation
+contains data, that is ready to be written out, but no presentation
 information.
 
 2) For now we have one-statistic -- one-class relation. I think
@@ -17,7 +17,7 @@ this is bad, and should be changed before it's too late. One
 statistic class should obviously be a source of many statistic
 objects. For example, we could create tables for only part of
 the revisions, or monthly, weekly and daily graphs with one
-object created with different parameters.
+type of object created with different parameters.
 
 3) There should be dynamic list of command line options:
 --enable-STATISTIC or --disable-STATISTIC. To achieve this,
@@ -34,15 +34,15 @@ code will issue a warning.
 
 6) Statistic constructor should take at least statistic
 identifier and revision data. No calculations are performed while
-constructing object. Object can then be tested whether they are
+constructing object. Object can then be tested whether it is
 wanted or not. If object is wanted, calculations are performed.
 
-7) If all statistics are generated, output documents can be
+7) When all statistics are generated, output documents can be
 producted. Multiple output formats should be allowed in one
 program pass.
 
 8) There should be data-retriever classes. Data is now obtained
-by calling svn, at it will stay like that for a while. However,
+by calling svn, and it will stay like that for a while. However,
 there are two important uses for data-retriever objects:
  a) generating statistics from XML file (obtained earlier with
  svn log --xml);

@@ -60,6 +60,7 @@ def get_data(config):
     w = f.close()
     if w is not None:
         raise 'errors'
+    assert isinstance(xml_data.decode('utf-8'), unicode)
     return xml_data    
 
 def generate_stats(config, data):
@@ -301,6 +302,11 @@ class Statistic:
     def is_wanted(self):
         return self._wanted
 
+    def generate(self):
+        """Generate statistics - do calculations."""
+        raise Exception("This is a placeholder only,"
+            + " implement this method in derived class")
+
 
 class TableStatistic(Statistic):
     """A statistic that is presented as a table.
@@ -326,6 +332,10 @@ class AuthorsByCommits(TableStatistic):
         """
         TableStatistic.__init__(self, 'authors_by_number_of_commits', 'Authors by total number of commits')
         assert(isinstance(revision_data, RevisionData))
+
+    def generate(self):
+        """Generate statistic afrter it has been initialised with
+        revision data."""
 
         abc = {}
 
