@@ -781,8 +781,8 @@ class GeneralStatisticsHTMLWriter(HTMLWriter):
             'revision_count': str(statistic.get_revision_count()),
             'first_rev_number': str(statistic.get_first_rev_number()),
             'last_rev_number': str(statistic.get_last_rev_number()),
-            'first_rev_date': time.strftime('%c', time.localtime(statistic.get_first_rev_date())),
-            'last_rev_date': time.strftime('%c', time.localtime(statistic.get_last_rev_date())),
+            'first_rev_date': time.strftime('%c', time.gmtime(statistic.get_first_rev_date())),
+            'last_rev_date': time.strftime('%c', time.gmtime(statistic.get_last_rev_date())),
             'age_of_repository': self._format_time_span(
                                             statistic.get_first_rev_date(),
                                             statistic.get_last_rev_date()
@@ -1135,3 +1135,4 @@ class AuthorsByDiffSize(TableStatistic):
 if __name__ == '__main__':
     locale.setlocale(locale.LC_ALL)
     main(sys.argv) 
+
