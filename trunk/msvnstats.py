@@ -585,17 +585,6 @@ class RevisionInfo:
 
     def get_revision_number(self):
         return self._revision_number
-
-def cool_revisions_authors(revisions):
-    """Get authors of cool revisions.
-    """
-    r_to_a = {}
-    for rv in revisions:
-        n = rv.get_revision_number()
-        if not is_number_cool(n): continue
-        else: r_to_a[n] = rv.get_author()
-
-    return r_to_a
     
 
 class ModifiedPath:
