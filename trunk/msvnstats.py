@@ -229,7 +229,9 @@ class Statistic:
     requires_graphics = False
     
     def __init__(self, config, name, title):
-        assert isinstance(name, basestring), ValueError("name must be a string")
+        assert isinstance(name, basestring), ValueError("name must be a string, now: %s (%s)" % (
+            repr(name),
+            repr(type(name))))
         assert isinstance(title, basestring), ValueError("title must be a string")
         self._name = name
         self._title = title
@@ -734,8 +736,8 @@ class AllStatistics(GroupStatistic):
         """
         GroupStatistic.__init__(self, config, "mpy_svn_stats", "MPY SVN Statistics")
         self.append(GeneralStatistics(config))
-#        self.append(AuthorsByCommits(config))
         self.append(AuthorsByCommitsGroup(config))
+        self.append(ChangedPathsGroup(config))
         self.append(AuthorsByChangedPaths(config))
         self.append(AuthorsByCommitLogSize(config))
         self.append(CommitsByWeekGraphStatistic(config))
@@ -761,6 +763,223 @@ class AuthorsByCommitsGroup(GroupStatistic):
         self._set_writer('html', GroupStatisticHTMLWriter(self))
         self._want_output_mode('html')
 
+
+class SimpleFunctionGroup(GroupStatistic):
+    """A statistic for measuring one function of revision
+    (for example: commit count, changed paths, log message size etc).
+    Includes:
+        - authors sorted by value for:
+            - total repo life
+            - last month
+            - last 7 days
+        - graph for authors
+        - graoh for function's value
+    """
+
+    class SimpleTable(TableStatistic):
+        """Specific statistic - show table author -> commit count sorted
+        by commit count.
+        """
+        def __init__(self, config, parent, start_date=None, end_date=None, subtitle=None):
+            id = parent.id + '_simple_table'
+            self.parent = parent
+            if start_date:
+                id += "_fromdate_" + str(int(start_date))
+            if end_date:
+                id += "_todate_" + str(int(end_date))
+
+            title = 'Table of authors'
+            if subtitle:
+                title += ': ' + subtitle
+
+            TableStatistic.__init__(self, config, id, title)
+            self.start_date = start_date
+            self.end_date = end_date
+
+        def column_names(self):
+            return ('Author', 'Number', 'Percentage')
+
+        def configure(self, config):
+            """Handle configuration - decide whether we are wanted/or possible to
+            be calculated and output.
+            """
+            pass
+
+        def calculate(self, revision_data):
+            """Do calculations based on revision data passed as
+            parameter (which must be a RevisionData instance).
+
+            This method sets internal _data member.
+            Output writer can then get it by calling rows().
+            """
+            assert isinstance(revision_data, RevisionData), ValueError(
+                "Expected RevisionData instance, got %s", repr(revision_data))
+
+            abc = {}
+
+            for rv in revision_data.get_revisions():
+                if self.start_date:
+                    if rv.get_date() < self.start_date:
+                        continue
+                if self.end_date:
+                    if rv.get_date() > self.end_date:
+                        continue
+                values = self.parent.revision_function(rv)
+                for (author, value) in values.iteritems():
+                    if not abc.has_key(author): abc[author] = value
+                    else: abc[author] += value
+
+            data = [(a, abc[a]) for a in abc.keys()]
+            data.sort(lambda x,y: cmp(y[1], x[1]))
+
+            rows = []
+
+            for k,v in data:
+                rows.append([k,
+                        str(v),
+                        "%.2f%%" % (float(v) * 100.0 / float(len(revision_data)))])
+            
+            self._data = rows
+    
+
+    class SimpleMultiAuthorGraphStatistic(GraphStatistic):
+        """Show how many commits were made by most active
+        users."""
+
+        def __init__(self, config, parent):
+            """Initialise."""
+            self.parent = parent
+            self.id = parent.id + '_multi_author_graph'
+            self.number_of_users_to_show = 7
+            GraphStatistic.__init__(self, config,
+                self.id,
+                "Graph for most active commiters")
+
+        def _get_users(self, revision_data):
+            """Find users to be included in graph."""
+            return revision_data.get_users_sorted_by_commit_count()[:self.number_of_users_to_show]
+
+        def _make_colors(self, users):
+            """Create different colors for each values."""
+            saturation = 1.0
+            brightness = 0.75
+            self.colors = {}
+            n = 0
+            for user in self.series_names:
+                
+                hue = float(n) / float(len(self.series_names))
+                n += 1
+
+                assert hue >= 0.0 and hue <= 1.0
+
+                i = int(hue * 6.0)
+                f = hue * 6.0 - float(i)
+                p = brightness * (1.0 - saturation)
+                q = brightness * (1.0 - saturation * f)
+                t = brightness * (1.0 - saturation * (1.0 - f))
+
+                o = {
+                    0: (brightness, t, p),
+                    1: (q, brightness, p),
+                    2: (p, brightness, t),
+                    3: (p, q, brightness),
+                    4: (t, p, brightness),
+                    5: (brightness, p, q)
+                }
+
+                (r, g, b) = o[i]
+
+                assert r >= 0.0 and r <= 1.0
+                assert g >= 0.0 and g <= 1.0
+                assert b >= 0.0 and b <= 1.0
+                
+                self.colors[user] = (int(r*256.0), int(g*256.0), int(b*256.0))
+        
+        def calculate(self, revision_data):
+            """Calculate statistic."""
+            assert len(self._wanted_output_modes) > 0
+
+            users = self._get_users(revision_data)
+            self.series_names = users
+            self._make_colors(users)
+
+            
+            week_in_seconds = 7 * 24 * 60 * 60 * 1.0
+        
+            start_of_week = revision_data.get_first_revision().get_date()
+            end_of_week = start_of_week + week_in_seconds
+
+            self._min_x = revision_data.get_first_revision().get_date()
+            self._max_x = revision_data.get_last_revision().get_date()
+            self._min_y = 0
+            self._max_y = 0
+            self._values = {}
+
+            for user in users:
+                self._values[user] = {}
+
+            i = 1
+            while start_of_week < revision_data.get_last_revision().get_date():
+                for user in users:
+                    fx = float(start_of_week+(end_of_week - start_of_week)/2)
+                    this_week_revisions = revision_data.get_revisions_by_date(start_of_week, end_of_week)
+                    users_revisions = [revision for revision in this_week_revisions if revision.get_author() == user]
+
+                    y = 0.0
+
+                    for revision in users_revisions:
+                        values = self.parent.revision_function(revision)
+                        for (author, value) in values.iteritems():
+                            assert(author == user)
+                            y += value
+
+
+                    fy = float(y) * float(end_of_week - start_of_week) / float(week_in_seconds)
+                    self._values[author][fx] = fy
+                    if y > self._max_y: self._max_y = y
+                    
+                start_of_week += week_in_seconds
+                end_of_week = start_of_week + week_in_seconds
+                if end_of_week > revision_data.get_last_revision().get_date():
+                    end_of_week = revision_data.get_last_revision().get_date()
+                i += 1
+        
+        def horizontal_axis_title(self):
+            return "Time"
+        
+        def vertical_axis_title(self):
+            return self.parent.value_description
+    
+    
+    def __init__(self, config, id, name):
+        self.id = id
+        self.name = name
+        self.value_description = name
+        GroupStatistic.__init__(self, config, id, name)
+
+        self.append(self.SimpleTable(config, self))
+        self.append(self.SimpleTable(config, self,
+            config.end_date - month_seconds, config.end_date,
+            'Last month'))
+        self.append(self.SimpleTable(config, self,
+            config.end_date - week_seconds, config.end_date,
+            'Last week'))
+        self.append(self.SimpleMultiAuthorGraphStatistic(config, self))
+
+        self._set_writer('html', GroupStatisticHTMLWriter(self))
+        self._want_output_mode('html')
+
+
+class ChangedPathsGroup(SimpleFunctionGroup):
+    """Implementation of SimpleFunctionGroup, that
+    gives info about changed paths."""
+
+    def __init__(self, config):
+        SimpleFunctionGroup.__init__(self, config, 'changed_paths', 'Number of changed paths')
+    
+    def revision_function(self, revision):
+        return {revision.get_author(): len(revision.get_modified_paths())}
+    
 
 class StatisticWriter:
     """Abstract class for all output generators.
