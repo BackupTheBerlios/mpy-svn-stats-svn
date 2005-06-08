@@ -80,23 +80,19 @@ def main(argv):
     
     print "getting data"
     xmldata = get_data(config)
-    print "done"
     
     run_time_start = time.time()
     
     print "parsing data"
     revision_data = RevisionData(config.get_repository_url(), parseString(xmldata))
-    print "done"
 
     print "calculating stats"
     stats.calculate(revision_data)
-    print "done"
     
     run_time_end = time.time()
     
     print "writing data"
     stats.write(run_time=(run_time_end - run_time_start)) 
-    print "done"
 
     print "Have %d stats objects, %d of them are wanted." % (
         stats.count_all(),
