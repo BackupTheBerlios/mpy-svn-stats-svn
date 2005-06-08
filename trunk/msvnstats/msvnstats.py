@@ -56,12 +56,16 @@ import datetime
 from cgi import escape
 from xml.dom.minidom import parseString
 
+# local imports
+import mhtml
+from writer import StatisticWriter
 
 # conditional imports
 try:
     import Image, ImageDraw, ImageFont
     _have_pil = True
-except:
+except ImportError, e:
+    print e
     _have_pil = False
 
 
@@ -162,7 +166,7 @@ class Config:
         self._error_message = None
         self._svn_binary = 'svn'
         self.input_file = None
-        self._output_dir = 'mpy-svn-stats'
+        self.output_dir = 'mpy-svn-stats'
 
         self._enabled_stats = []
         self._disabled_stats = []
@@ -170,8 +174,6 @@ class Config:
         self.have_pil = _have_pil
         if not self.have_pil:
             self._print_warning_about_pil()
-        else:
-            print "Will generate PIL graphs."
 
         try:
             optlist, args = getopt.getopt(
@@ -241,9 +243,6 @@ class Config:
         else:
             return self._svn_binary
 
-    def get_output_dir(self):
-        return self._output_dir
-
     def want_statistic(self, statistic_type):
         """Test whether statistic of type statistic_type is wanted.
         """
@@ -308,7 +307,7 @@ class Statistic:
     def _set_writer(self, mode, writer):
         """Set writer object for mode.
         """
-        assert isinstance(mode, str), ValueError("Mode must be a shor string (identifier)")
+        assert isinstance(mode, str), ValueError("Mode must be a short string (identifier)")
         assert isinstance(writer, StatisticWriter), ValueError("Writer must be a Writer instance")
         self._writers[mode] = writer
 
@@ -326,6 +325,7 @@ class Statistic:
         """Write out stats using all wanted modes."""
         for mode in self._wanted_output_modes:
             writer = self._writers[mode]
+            print "Writing using %s" % str(writer)
             writer.write(run_time=run_time)
 
     def output(self, mode):
@@ -367,10 +367,12 @@ class GeneralStatistics(Statistic):
         """Initialise."""
         Statistic.__init__(self, config, "general_statistics", "General statistics")
         self._set_writer('html', GeneralStatisticsHTMLWriter(self))
+        self._set_writer('multi_page_html', mhtml.GeneralStatsWriter(self))
         self._want_output_mode('html')
+        self._want_output_mode('multi_page_html')
 
     def configure(self, config):
-        pass
+        Statistic.configure(self, config)
 
     def calculate(self, revision_data):
         self._first_rev_number = revision_data.get_first_revision().get_number()
@@ -810,7 +812,9 @@ class AllStatistics(GroupStatistic):
 #        self.append(AuthorsByCommitLogSize(config))
 #        self.append(CommitsByWeekGraphStatistic(config))
         self._set_writer('html', TopLevelGroupStatisticHTMLWriter(self))
+        self._set_writer('multi_page_html', mhtml.MultiPageHTMLWriter(self))
         self._want_output_mode('html')
+        self._want_output_mode('multi_page_html')
 
 
 class SimpleFunctionGroup(GroupStatistic):
@@ -1076,22 +1080,19 @@ class LogMessageLengthGroup(SimpleFunctionGroup):
         }
     
 
-class StatisticWriter:
-    """Abstract class for all output generators.
-    """
-    pass
-
-
 class HTMLWriter(StatisticWriter):
     """An abstract class for HTML writing."""
+
+    def __init__(self, stat):
+        StatisticWriter.__init__(self, stat)
     
     def _standard_statistic_header(self):
         """Make all statistic header look the same."""
         r = ''
 
         h2 = "<h2><a name=\"%s\"></a>%s</h2>\n" % (
-            escape(self._statistic.name()),
-            escape(self._statistic.title())
+            escape(self.statistic.name()),
+            escape(self.statistic.title())
         )
 
         goToTopLink = "<a class=\"topLink\" href=\"#top\">top</a>\n"
@@ -1107,13 +1108,14 @@ class HTMLWriter(StatisticWriter):
         return "<hr class=\"statisticDelimiter\"/>"
 
     def configure(self, config):
+        StatisticWriter.configure(self, config)
         self.is_configured = True
 
 
 class GroupStatisticHTMLWriter(HTMLWriter):
     """Class for writing group statistics (abstract)."""
     def __init__(self, group_statistic=None):
-        self._statistic = group_statistic
+        HTMLWriter.__init__(self, group_statistic)
 
     def set_statistic(self, statistic):
         self._statistic = statistic
@@ -1130,13 +1132,13 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
         GroupStatisticHTMLWriter.__init__(self, statistic)
 
     def configure(self, config):
-        """Configure - generally - get the output directory."""
-        self._output_dir = config.get_output_dir()
+        """Configure."""
+        self.output_dir = config.output_dir
 
     def write(self, run_time):
         """Write out generated statistics."""
-        _create_output_dir(self._output_dir)
-        filename = self._output_dir + '/index.html'
+        _create_output_dir(self.output_dir)
+        filename = self.output_dir + '/index.html'
         output_file = file(filename, "w")
         output_file.write(
             self._page_head()
@@ -1293,7 +1295,7 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
             }
 
     def _page_menu(self):
-        return "<ul class=\"menu\">" + self._recursive_menu(self._statistic) + "</ul>\n"
+        return "<ul class=\"menu\">" + self._recursive_menu(self.statistic) + "</ul>\n"
 
     def _recursive_menu(self, statistic):
         """Return statistic as li tag.
@@ -1323,7 +1325,7 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
 
     def _page_main(self):
         flat = [] 
-        stack = [self._statistic]
+        stack = [self.statistic]
 
         while len(stack) > 0:
             stat = stack.pop()
@@ -1348,7 +1350,7 @@ class TableHTMLWriter(HTMLWriter):
 
     def __init__(self, stat):
         assert isinstance(stat, TableStatistic), ValueError()
-        self._statistic = stat
+        HTMLWriter.__init__(self, stat)
 
     def output(self):
         r = '\n'
@@ -1362,7 +1364,7 @@ class TableHTMLWriter(HTMLWriter):
     def _table_header(self):
         r = "<tr>\n"
         r += "  <th>No</th>\n"
-        for column_name in self._statistic.column_names():
+        for column_name in self.statistic.column_names():
             r += "  <th>" + escape(column_name) + "</th>\n"
         r += "</tr>\n"
         return r
@@ -1371,7 +1373,7 @@ class TableHTMLWriter(HTMLWriter):
     def _table_body(self):
         r = ''
         i = 1
-        for row in self._statistic.rows():
+        for row in self.statistic.rows():
             r += "<tr>\n"
             r += "  <td>%d</td>\n" % i
             for cell in row:
@@ -1478,7 +1480,7 @@ class GraphImageHTMLWriter(HTMLWriter):
         """Initialise instance. Name will be used for
         image filename."""
         assert isinstance(statistic, GraphStatistic)
-        self._statistic = statistic
+        self.statistic = statistic
         self.font = ImageFont.load_default()
 
     def configure(self, config):
@@ -1489,13 +1491,13 @@ class GraphImageHTMLWriter(HTMLWriter):
         self._margin_top = 20
         self._margin_left = 50
         self._margin_right = 20
-        self._image_dir = config.get_output_dir()
+        self.image_dir = config.output_dir
 
     def get_image_fname(self):
-        return self._image_dir + '/' + self._statistic.name() + '.png'
+        return os.path.join(self.image_dir, self.statistic.name() + '.png')
 
     def get_image_html_src(self):
-        return self._statistic.name() + '.png'
+        return self.statistic.name() + '.png'
 
     def _write_image(self):
         """Write image files."""
@@ -1514,10 +1516,10 @@ class GraphImageHTMLWriter(HTMLWriter):
         im.save(self.get_image_fname())
 
     def _paint_content(self, im, draw):
-        for k,values in self._statistic._values.iteritems():
+        for k,values in self.statistic._values.iteritems():
             keys = values.keys()
             keys.sort()
-            color = self._statistic.colors[k]
+            color = self.statistic.colors[k]
 
             last_pair = (None, None)
             for key in keys:
@@ -1542,10 +1544,10 @@ class GraphImageHTMLWriter(HTMLWriter):
         gy = float(point[1])
         point = (gx, gy)
 
-        assert gx >= self._statistic._min_x
-        assert gx <= self._statistic._max_x, AssertionError("bad gx: %f (should be smaller than %f)" % (gx, self._statistic._max_x))
-        assert gy >= self._statistic._min_y
-        assert gy <= self._statistic._max_y
+        assert gx >= self.statistic._min_x
+        assert gx <= self.statistic._max_x, AssertionError("bad gx: %f (should be smaller than %f)" % (gx, self._statistic._max_x))
+        assert gy >= self.statistic._min_y
+        assert gy <= self.statistic._max_y
 
         margin_left = self._margin_left
         margin_right = self._margin_right
@@ -1555,14 +1557,14 @@ class GraphImageHTMLWriter(HTMLWriter):
         image_width = self._image_width
         image_height = self._image_height
 
-        range_x = float(self._statistic._max_x - self._statistic._min_x)
-        range_y = float(self._statistic._max_y - self._statistic._min_y)
+        range_x = float(self.statistic._max_x - self.statistic._min_x)
+        range_y = float(self.statistic._max_y - self.statistic._min_y)
 
         assert range_x >= 0
         assert range_y >= 0
 
-        min_x = float(self._statistic._min_x)
-        min_y = float(self._statistic._min_y)
+        min_x = float(self.statistic._min_x)
+        min_y = float(self.statistic._min_y)
 
         x = margin_left + (gx - min_x) * (image_width - margin_left - margin_right) / range_x
 
@@ -1603,7 +1605,7 @@ class GraphImageHTMLWriter(HTMLWriter):
         draw.line((end_x, end_y, end_x - 3, end_y + 5), '#999')
 
     def _draw_horizontal_axis_title(self, image, draw):
-        text = self._statistic.horizontal_axis_title()
+        text = self.statistic.horizontal_axis_title()
         (text_width, text_height) = draw.textsize(text, font=self.font)
 
         corner_x = self._image_width - self._margin_right
@@ -1622,7 +1624,7 @@ class GraphImageHTMLWriter(HTMLWriter):
             (text_im_width, text_im_height), 'white')
         textdraw = ImageDraw.Draw(textim)
     
-        text = self._statistic.vertical_axis_title()
+        text = self.statistic.vertical_axis_title()
         (text_width, text_height) = textdraw.textsize(text, font=self.font)
 
         textdraw.text((0,0), text, fill='black', font=self.font)
@@ -1649,7 +1651,7 @@ class GraphImageHTMLWriter(HTMLWriter):
         del textim
 
     def _draw_axes_labels(self, image, draw):
-        labels = self._statistic.x_labels()
+        labels = self.statistic.x_labels()
         if len(labels) == 0: return
         #print "%s: have %d labels" % (self, len(labels))
         for label_datetime, label in labels.iteritems():
@@ -1698,7 +1700,7 @@ class GraphImageHTMLWriter(HTMLWriter):
             'image_src': self.get_image_html_src()
         }
 
-        if len(self._statistic.colors.keys()) > 1:
+        if len(self.statistic.colors.keys()) > 1:
             r += self._legend()
         
         r += self._standard_statistic_footer()
