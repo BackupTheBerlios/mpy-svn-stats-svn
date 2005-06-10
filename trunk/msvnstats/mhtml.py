@@ -10,11 +10,31 @@ from writer import StatisticWriter
 """
 
 class MultiPageHTMLWriter(StatisticWriter):
+    """Base for multi-page html writers."""
+    pass
+
+
+class TopMultiPageHTMLWriter(MultiPageHTMLWriter):
 
     def __init__(self, stat):
         StatisticWriter.__init__(self, stat)
 
     def write(self, run_time):
+        """Write out stats recursively.
+        General ideas:
+
+         - each statistic has it's own html page
+         - each statistic chooses it's own filename
+         - statistic containment (groupping) doesn't alter generation proces
+           besides navigation (menu)
+         - general layout of page is:
+
+           - header on top
+           - tree menu to the left
+           - main page on the right
+           - some simple on bottom of page
+
+        """
         self.create_output_dir()
 
     def create_output_dir(self):

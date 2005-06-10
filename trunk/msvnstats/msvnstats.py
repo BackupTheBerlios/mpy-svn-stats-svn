@@ -144,7 +144,7 @@ def generate_stats(config, data):
         raise x
     return Stats(config, dom)
 
-def _create_output_dir(dir):
+def create_output_dir(dir):
     """Create output dir."""
     if not os.path.isdir(dir):
         os.mkdir(dir)
@@ -469,54 +469,6 @@ class AuthorsByCommits(TableStatistic):
         self._data = rows
 
 
-#class AuthorsByChangedPaths(TableStatistic):
-#    """Authors sorted by total number of changed paths.
-#    """
-#    def __init__(self, config):
-#        """Generate statistics out of revision data.
-#        """
-#        TableStatistic.__init__(self, config, 'authors_number_of_paths', 'Authors by total number of changed paths')
-#
-#    def configure(self, config):
-#        pass
-#
-#    def calculate(self, revision_data):
-#        """Perform calculations."""
-#        assert(isinstance(revision_data, RevisionData))
-#
-#        abp = {}
-#        max = 0
-#
-#        for rv in revision_data.get_revisions():
-#            author = rv.get_author()
-#            modified_path_count  = len(rv.get_modified_paths())
-#            if not abp.has_key(author): abp[author] = modified_path_count
-#            else: abp[author] += modified_path_count
-#            max += modified_path_count
-#
-#        data = [(a, abp[a]) for a in abp.keys()]
-#        data.sort(lambda x,y: cmp(y[1], x[1]))
-#
-#        self._data = data
-#
-#        rows = []
-#
-#        for k,v in data:
-#            percentage = float(v) * 100.0 / float(max)
-#            assert percentage >= 0.0
-#            assert percentage <= 100.0
-#            rows.append([k,
-#                str(v),
-#                "%.2f%%" % percentage])
-#
-#        self._data = rows
-#
-#    def column_names(self):
-#        """Return names of collumns."""
-#        return ('Author', 'Total number of changed paths', 'Percentage of all changed paths')
-
-
-
 class GraphStatistic(Statistic):
     """This stats are presented as a graph.
 
@@ -569,155 +521,6 @@ class GraphStatistic(Statistic):
                 datetime.datetime.fromtimestamp(self._max_x))
         else:
             return {}
-
-
-class CommitsByWeekGraphStatistic(GraphStatistic):
-    """Graph showing number of commits by week."""
-
-    def __init__(self, config):
-        """Initialise."""
-        GraphStatistic.__init__(self, config, "commits_by_week_graph", "Number of commits in week")
-    
-    def calculate(self, revision_data):
-        """Calculate statistic."""
-        assert len(self._wanted_output_modes) > 0
-        
-        week_in_seconds = 7 * 24 * 60 * 60 * 1.0
-    
-        start_of_week = revision_data.get_first_revision().get_date()
-        end_of_week = start_of_week + week_in_seconds
-
-        self._min_x = revision_data.get_first_revision().get_date()
-        self._max_x = revision_data.get_last_revision().get_date()
-        self._min_y = 0
-        self._max_y = 0
-
-        values = {}
-
-        while start_of_week < revision_data.get_last_revision().get_date():
-            commits = revision_data.get_revisions_by_date(start_of_week, end_of_week)
-            y = len(commits)
-            fx = float(start_of_week+(end_of_week - start_of_week)/2)
-            fy = float(y) * float(end_of_week - start_of_week) / float(week_in_seconds)
-            values[fx] = fy
-
-            if y > self._max_y: self._max_y = y
-
-            start_of_week += week_in_seconds
-            end_of_week = start_of_week + week_in_seconds
-            if end_of_week > revision_data.get_last_revision().get_date():
-                end_of_week = revision_data.get_last_revision().get_date()
-        
-        self.series_names = ['number_of_commits']
-        self._values = {}
-        self._values['number_of_commits'] = values
-        self.colors = {}
-        self.colors['number_of_commits'] = (0, 0, 0)
-    
-    def horizontal_axis_title(self):
-        return "Time"
-    
-    def vertical_axis_title(self):
-        return "Number of commits"
-
-
-#class CommitsByWeekPerUserGraphStatistic(GraphStatistic):
-#    """Show how many commits were made by most active
-#    users."""
-#
-#    def __init__(self, config):
-#        """Initialise."""
-#        self.number_of_users_to_show = 7
-#        GraphStatistic.__init__(self, config,
-#            "commits_by_week_per_user_graph",
-#            "Number of commits in week made by most active users")
-#
-#    def _get_users(self, revision_data):
-#        """Find users to be included in graph."""
-#        return revision_data.get_users_sorted_by_commit_count()[:self.number_of_users_to_show]
-#
-#    def _make_colors(self, users):
-#        """Create different colors for each values."""
-#        saturation = 1.0
-#        brightness = 0.75
-#        self.colors = {}
-#        n = 0
-#        for user in self.series_names:
-#            
-#            hue = float(n) / float(len(self.series_names))
-#            n += 1
-#
-#            assert hue >= 0.0 and hue <= 1.0
-#
-#            i = int(hue * 6.0)
-#            f = hue * 6.0 - float(i)
-#            p = brightness * (1.0 - saturation)
-#            q = brightness * (1.0 - saturation * f)
-#            t = brightness * (1.0 - saturation * (1.0 - f))
-#
-#            o = {
-#                0: (brightness, t, p),
-#                1: (q, brightness, p),
-#                2: (p, brightness, t),
-#                3: (p, q, brightness),
-#                4: (t, p, brightness),
-#                5: (brightness, p, q)
-#            }
-#
-#            (r, g, b) = o[i]
-#
-#            assert r >= 0.0 and r <= 1.0
-#            assert g >= 0.0 and g <= 1.0
-#            assert b >= 0.0 and b <= 1.0
-#            
-#            self.colors[user] = (int(r*256.0), int(g*256.0), int(b*256.0))
-#    
-#    def calculate(self, revision_data):
-#        """Calculate statistic."""
-#        assert len(self._wanted_output_modes) > 0
-#
-#        users = self._get_users(revision_data)
-#        self.series_names = users
-#        self._make_colors(users)
-#        
-#        week_in_seconds = 7 * 24 * 60 * 60 * 1.0
-#    
-#        start_of_week = revision_data.get_first_revision().get_date()
-#        end_of_week = start_of_week + week_in_seconds
-#
-#        self._min_x = revision_data.get_first_revision().get_date()
-#        self._max_x = revision_data.get_last_revision().get_date()
-#        self._min_y = 0
-#        self._max_y = 0
-#        self._values = {}
-#
-#        for user in users:
-#            self._values[user] = {}
-#
-#        i = 1
-#        while start_of_week < revision_data.get_last_revision().get_date():
-#            for user in users:
-#                commits = revision_data.get_revisions_by_date(start_of_week, end_of_week)
-#                y = len([rv for rv in revision_data.revisions_by_users[user] if (
-#                    (rv.get_date() > start_of_week and rv.get_date() < end_of_week))])
-#                fx = float(start_of_week+(end_of_week - start_of_week)/2)
-#                fy = float(y) * float(end_of_week - start_of_week) / float(week_in_seconds)
-#
-#                self._values[user][fx] = fy
-#
-#                if y > self._max_y: self._max_y = y
-#
-#            start_of_week += week_in_seconds
-#            end_of_week = start_of_week + week_in_seconds
-#            if end_of_week > revision_data.get_last_revision().get_date():
-#                end_of_week = revision_data.get_last_revision().get_date()
-#            i += 1
-#    
-#    def horizontal_axis_title(self):
-#        return "Time"
-#    
-#    def vertical_axis_title(self):
-#        return "Number of commits"
 
 
 class GroupStatistic(Statistic):
@@ -812,7 +615,7 @@ class AllStatistics(GroupStatistic):
 #        self.append(AuthorsByCommitLogSize(config))
 #        self.append(CommitsByWeekGraphStatistic(config))
         self._set_writer('html', TopLevelGroupStatisticHTMLWriter(self))
-        self._set_writer('multi_page_html', mhtml.MultiPageHTMLWriter(self))
+        self._set_writer('multi_page_html', mhtml.TopMultiPageHTMLWriter(self))
         self._want_output_mode('html')
         self._want_output_mode('multi_page_html')
 
@@ -1137,7 +940,7 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
 
     def write(self, run_time):
         """Write out generated statistics."""
-        _create_output_dir(self.output_dir)
+        create_output_dir(self.output_dir)
         filename = self.output_dir + '/index.html'
         output_file = file(filename, "w")
         output_file.write(
@@ -1931,90 +1734,6 @@ class ModifiedPath:
 
     def get_path(self):
         return self._path
-
-
-#class AuthorsByCommitLogSize(TableStatistic):
-#    """Specific statistic - show table author -> commit log, sorted
-#    by commit log size.
-#    """
-#    def __init__(self, config):
-#        """Generate statistics out of revision data.
-#        """
-#        TableStatistic.__init__(self, config, 'authors_by_log_size', """Authors by total size of commit log messages""")
-#
-#    def configure(self, config):
-#        """Handle configuration."""
-#        pass
-#
-#    def column_names(self):
-#        return ('Author',
-#            'Total numer od characters in all log messages',
-#            'Percentage of all log messages')
-#
-#    def calculate(self, revision_data):
-#        """Do calculations."""
-#        assert(isinstance(revision_data, RevisionData))
-#
-#        abc = {}
-#        sum = 0
-#        
-#        for rv in revision_data.get_revisions():
-#            author = rv.get_author()
-#            log = rv.get_commit_log()
-#            size = len(log)
-#            if not abc.has_key(author): abc[author] = size
-#            else: abc[author] += size
-#            sum += size
-#
-#        data = [(a, abc[a]) for a in abc.keys()]
-#        data.sort(lambda x,y: cmp(y[1], x[1]))
-#
-#        rows = []
-#
-#        for k,v in data:
-#            rows.append([k,
-#                str(v),
-#                "%2.2f%%" % (float(v) * 100.0 / float(sum))])
-#
-#        self._data = rows
-
-
-#class AuthorsByDiffSize(TableStatistic):
-#    """Specific statistic - shows table author -> diffs size, sorted by
-#    size
-#    """
-#
-#    wanted_by_default = False
-#    
-#    def __init__(self, config, revision_data):
-#        """Generate statistics out of revision data and `svn diff`.
-#        """
-#        TableStatistic.__init__(self, 'author_by_diff_size', 'Authors by total size of diffs')
-#        assert(isinstance(revision_data, RevisionData))
-#
-#        abc = {}
-#
-#        for rv in revision_data.get_revisions():
-#            author = rv.get_author()
-#            rev_number = rv.get_revision_number()
-#            command = "%s -r %d:%d diff %s" % (config.get_svn_binary(),
-#                rev_number-1, rev_number,
-#                config.get_repository_url())
-#            f = os.popen(command)
-#            result = f.read()
-#            f.close()
-#            if not abc.has_key(author): 
-#                abc[author] = (len(result), len(result.split()))
-#            else:
-#                abc[author] = (abc[author][0] + len(result), abc[author][1] + len(result.split()))
-#
-#        data = [(a, abc[a][0], abc[a][1]) for a in abc.keys()]
-#        data.sort(lambda x,y: cmp(y[1], x[1]))
-#
-#        self._data = data
-#
-#    def column_names(self):
-#        return ('Author', 'Size of diffs', 'Number of lines in diffs')
 
 
 labels_for_time_span_cache = {}
