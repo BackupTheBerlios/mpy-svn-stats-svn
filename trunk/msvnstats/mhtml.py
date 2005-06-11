@@ -36,6 +36,16 @@ class TopMultiPageHTMLWriter(MultiPageHTMLWriter):
 
         """
         self.create_output_dir()
+        self.generate_menu()
+        self.generate_pages()
+
+    def generate_menu(self):
+        """Create (recursively) menu."""
+        pass
+
+    def generate_pages(self):
+        """Write html files for each stats object."""
+        pass
 
     def create_output_dir(self):
         self.output_dir = os.path.join(self.config.output_dir, 'multi-html')
