@@ -24,6 +24,24 @@ class MultiPageHTMLWriter(StatisticWriter):
                     s.write('</li>\n')
             s.write('</ul>\n')
 
+    def write_page(self, menu_html):
+        """Write html file."""
+        print u"Writing html file for %s" % self.statistic
+        f = self.open_page_file()
+        print u"Writing to %s" % f
+
+    def open_page_file(self):
+        fname = self.get_filename()
+        return file(os.path.join(self.output_dir, fname), "w")
+
+    def get_filename(self):
+        return self.statistic.name + '.html'
+
+    def get_output_dir(self):
+        return os.path.join(self.config.output_dir, 'multi-html')
+
+    output_dir = property(get_output_dir)
+
 
 class TopMultiPageHTMLWriter(MultiPageHTMLWriter):
 
@@ -66,15 +84,19 @@ class TopMultiPageHTMLWriter(MultiPageHTMLWriter):
                 stack.extend(stat.children)
             if stat.is_wanted('multi_page_html'):
                 flat.append(stat)
+            else:
+                print u"%s is not wanted in multi-page-html mode" % stat
         print u"Generating %d pages..." % len(flat)
         for stat in flat:
-            print u" Generating %s..." % stat
+            stat.writers['multi_page_html'].write_page(menu_html)
 
     def create_output_dir(self):
-        self.output_dir = os.path.join(self.config.output_dir, 'multi-html')
         if not os.path.exists(self.output_dir):
             print "Creating directory \"%s\"" % self.output_dir
             os.makedirs(self.output_dir)
+
+    def get_filename(self):
+        return 'index.html'
 
 
 class GeneralStatsWriter(MultiPageHTMLWriter):
