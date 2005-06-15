@@ -1,8 +1,10 @@
 
 import os
 import os.path
+import cStringIO as StringIO
 
 # local
+from msvnstats import GroupStatistic
 from writer import StatisticWriter
 
 
@@ -11,7 +13,16 @@ from writer import StatisticWriter
 
 class MultiPageHTMLWriter(StatisticWriter):
     """Base for multi-page html writers."""
-    pass
+    def menu_html(self, s):
+        s.write(self.statistic.title)
+        if isinstance(self.statistic, GroupStatistic):
+            s.write('<ul>\n')
+            for child in self.statistic.children:
+                if child.is_wanted('multi_page_html'):
+                    s.write('<li>\n')
+                    child.writers['multi_page_html'].menu_html(s)
+                    s.write('</li>\n')
+            s.write('</ul>\n')
 
 
 class TopMultiPageHTMLWriter(MultiPageHTMLWriter):
@@ -36,12 +47,15 @@ class TopMultiPageHTMLWriter(MultiPageHTMLWriter):
 
         """
         self.create_output_dir()
-        self.generate_menu()
+        menu_html = self.generate_menu()
         self.generate_pages()
 
     def generate_menu(self):
         """Create (recursively) menu."""
-        pass
+        s = StringIO.StringIO()
+        self.menu_html(s)
+        return s.getvalue()
+
 
     def generate_pages(self):
         """Write html files for each stats object."""
@@ -54,6 +68,6 @@ class TopMultiPageHTMLWriter(MultiPageHTMLWriter):
             os.makedirs(self.output_dir)
 
 
-class GeneralStatsWriter(StatisticWriter):
+class GeneralStatsWriter(MultiPageHTMLWriter):
     """General stats multi-page html writer."""
 

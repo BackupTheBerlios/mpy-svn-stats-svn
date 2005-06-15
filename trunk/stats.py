@@ -3,7 +3,7 @@
 # todo - copyrights etc
 
 import sys
-import msvnstats.stats
+import msvnstats.msvnstats
 
 if __name__ == '__main__':
     msvnstats.msvnstats.main(sys.argv)

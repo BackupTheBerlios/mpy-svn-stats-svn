@@ -267,24 +267,17 @@ class Statistic:
 
     wanted_by_default = True
     requires_graphics = False
+    parent = None
     
     def __init__(self, config, name, title):
         assert isinstance(name, basestring), ValueError("name must be a string, now: %s (%s)" % (
             repr(name),
             repr(type(name))))
         assert isinstance(title, basestring), ValueError("title must be a string")
-        self._name = name
-        self._title = title
-        self._writers = {}
+        self.name = name
+        self.title = title
+        self.writers = {}
         self._wanted_output_modes = []
-
-    def title(self):
-        assert(isinstance(self._title, basestring), 'Title of the statistic must be specified!')
-        return self._title
-
-    def name(self):
-        assert isinstance(self._name, basestring), ValueError('Name must be a string')
-        return self._name
 
     def is_wanted(self, mode=None):
         """Check if particular output mode is wanted (either by default or
@@ -309,7 +302,7 @@ class Statistic:
         """
         assert isinstance(mode, str), ValueError("Mode must be a short string (identifier)")
         assert isinstance(writer, StatisticWriter), ValueError("Writer must be a Writer instance")
-        self._writers[mode] = writer
+        self.writers[mode] = writer
 
     def configure(self, config):
         self._configure_writers(config)
@@ -318,25 +311,25 @@ class Statistic:
             self._want_output_mode('html', False)
             
     def _configure_writers(self, config):
-        for writer in self._writers.values():
+        for writer in self.writers.values():
             writer.configure(config)
 
     def write(self, run_time):
         """Write out stats using all wanted modes."""
         for mode in self._wanted_output_modes:
-            writer = self._writers[mode]
+            writer = self.writers[mode]
             print "Writing using %s" % str(writer)
             writer.write(run_time=run_time)
 
     def output(self, mode):
-        writer = self._writers[mode]
+        writer = self.writers[mode]
         return writer.output()
 
     def __str__(self):
         """Return human-readable representation."""
         return "Statistic(title='%(title)s', name='%(name)s')" % {
-            'title': self.title(),
-            'name': self.name()
+            'title': self.title,
+            'name': self.name
         }
 
 
@@ -534,7 +527,7 @@ class GroupStatistic(Statistic):
         """Initialize internal variables. Must be called.
         """
         Statistic.__init__(self, config, name, title)
-        self._child_stats = []
+        self.children = []
 
     def __getitem__(self, number):
         """Get a child Statistic object."""
@@ -550,15 +543,12 @@ class GroupStatistic(Statistic):
             "Wrong parameter, expected Statistic instance, got %s" % (
                 repr(statistic)))
 
-        self._child_stats.append(statistic)
-
-    def children(self): 
-        """Get children."""
-        return self._child_stats
+        self.children.append(statistic)
+        statistic.parent = self
 
     def descendants(self):
         d = []
-        for child in self.children():
+        for child in self.children:
             if isinstance(child, GroupStatistic):
                 d += child.descendants()
             else:
@@ -567,7 +557,7 @@ class GroupStatistic(Statistic):
 
     def configure(self, config):
         Statistic.configure(self, config)
-        for child in self._child_stats:
+        for child in self.children:
             child.configure(config)
 
     def count_all(self):
@@ -575,7 +565,7 @@ class GroupStatistic(Statistic):
         That is, group statistics are not included.
         """
         total = 0
-        for stat in self._child_stats:
+        for stat in self.children:
             if isinstance(stat, GroupStatistic):
                 total += stat.count_all()
             else:
@@ -588,7 +578,7 @@ class GroupStatistic(Statistic):
     def calculate(self, revision_data):
         """Pass data to children."""
 
-        for child in self._child_stats:
+        for child in self.children:
             if child.is_wanted():
                 child.calculate(revision_data)
 
@@ -694,7 +684,11 @@ class SimpleFunctionGroup(GroupStatistic):
             rows = []
 
             for k,v in data:
-                percentage = float(v) * 100.0 / float(total_sum)
+                assert total_sum >= 0.0
+                if total_sum == 0.0:
+                    percentage = 0.0
+                else:
+                    percentage = float(v) * 100.0 / float(total_sum)
                 assert percentage >= 0.0
                 assert percentage <= 100.0
                 rows.append([k,
@@ -894,8 +888,8 @@ class HTMLWriter(StatisticWriter):
         r = ''
 
         h2 = "<h2><a name=\"%s\"></a>%s</h2>\n" % (
-            escape(self.statistic.name()),
-            escape(self.statistic.title())
+            escape(self.statistic.name),
+            escape(self.statistic.title)
         )
 
         goToTopLink = "<a class=\"topLink\" href=\"#top\">top</a>\n"
@@ -1111,19 +1105,20 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
         if isinstance(statistic, GroupStatistic):
 
             # count wanted children
-            wanted_children = len([child for child in statistic.children() if child.is_wanted(self.output_mode)])
+            wanted_children = len([child for child
+                in statistic.children if child.is_wanted(self.output_mode)])
             if wanted_children == 0:
                 return ''
 
-            r += "<li>%s:\n<ul>\n" % statistic.title()
-            for child in statistic.children():
+            r += "<li>%s:\n<ul>\n" % statistic.title
+            for child in statistic.children:
                 r += self._recursive_menu(child)
 
             r += "</ul>\n</li>\n"
         else:
             r += "<li><a class=\"menuLink\" href=\"#%s\">%s</a></li>\n" % (
-                statistic.name(),
-                statistic.title())
+                statistic.name,
+                statistic.title)
         return r
 
     def _page_main(self):
@@ -1135,7 +1130,7 @@ class TopLevelGroupStatisticHTMLWriter(GroupStatisticHTMLWriter):
             if not isinstance(stat, GroupStatistic):
                 flat.append(stat)
             else:
-                children = stat.children()
+                children = stat.children
                 children.reverse()
                 stack.extend(children)
 
@@ -1211,8 +1206,8 @@ class GeneralStatisticsHTMLWriter(HTMLWriter):
             </p>
         """ % {
             'repository_url': escape(statistic.get_repository_url()),
-            'statistic_name': escape(statistic.name()),
-            'statistic_title': escape(statistic.title()),
+            'statistic_name': escape(statistic.name),
+            'statistic_title': escape(statistic.title),
             'revision_count': str(statistic.get_revision_count()),
             'first_rev_number': str(statistic.get_first_rev_number()),
             'last_rev_number': str(statistic.get_last_rev_number()),
@@ -1297,10 +1292,10 @@ class GraphImageHTMLWriter(HTMLWriter):
         self.image_dir = config.output_dir
 
     def get_image_fname(self):
-        return os.path.join(self.image_dir, self.statistic.name() + '.png')
+        return os.path.join(self.image_dir, self.statistic.name + '.png')
 
     def get_image_html_src(self):
-        return self.statistic.name() + '.png'
+        return self.statistic.name + '.png'
 
     def _write_image(self):
         """Write image files."""
