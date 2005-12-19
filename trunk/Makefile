@@ -17,7 +17,7 @@ mpy-svn-stats.svnlog:
 
 
 zope-stats-download:
-	svn -v --xml svn://svn.zope.org/repos/main/Zope3 | ./filter.py > zope3.svnlog
+	svn -v --xml log svn://svn.zope.org/repos/main/Zope3 | ./filter.py > zope3.svnlog
 
 zope-stats-import:
 	[ -f zope3.svnlog ] && ./mpyss.py -i zope3.svnlog -u svn://svn.zope.org/repos/main/Zope3
