@@ -11,7 +11,86 @@ from cStringIO import StringIO
 
 import config
 import db
-from reports import AllReports
+from reports import AllReports, Report, ReportGroup
+from common import parse_date, ensure_date
+
+
+class OnePageHTMLStatsGenerator(object):
+    """Generate html stats and put then on one page, like previous versions od
+    mpy-svn-stats did."""
+
+    def escape(self, s):
+        return cgi.escape(s)
+
+    def _write_menu(self, s, reports):
+        s.write('<div class="menu">\n')
+        s.write('\t<h2>Contents</h2>\n')
+        s.write('\t<ul>\n')
+        self._write_menu_from_list(s, [reports])
+        s.write('\t</ul>\n')
+        s.write('</div>')
+
+    def _write_menu_from_list(self, s, reports):
+        for child in reports:
+            if isinstance(child, Report):
+                s.write("""<li><a href="#%s">%s</a></li>\n""" % (self.escape(child.name), self.escape(child.title)))
+            elif isinstance(child, ReportGroup):
+                s.write("""
+                    <li>
+                        <a href="#%s">%s</a>
+                        <ul>
+                """ % (child.name, child.title))
+                self._write_menu_from_list(s, child.children)
+                s.write("""
+                        </ul>
+                    </li>""")
+
+    def generate(self, options, reports, paramstyle, cursor):
+
+        s = StringIO()
+
+        s.write("<h1>Statistics for <em>%s</em></h1>\n" % self.escape(options.repo_url))
+        self._write_menu(s, reports)
+        s.write('<div class="reports">\n')
+        for report in reports.get_all_reports():
+            assert isinstance(report, Report), Exception('%s is not a report' % repr(report))
+            try:
+                html = report.generate(
+                    cursor=cursor,
+                    paramstyle=paramstyle,
+                    format='html',
+                    with_links=True
+                )
+                s.write(html)
+            except (Exception, TypeError), e:
+                print report, "failed"
+                raise
+        s.write('</div>\n')
+
+        filename = 'index.html'
+        output_dir = options.output_dir
+
+        output_file = file(os.path.join(output_dir, filename), 'w')
+
+        output_file.write('''
+            <html>
+                <head>
+                    <title>stats</title>
+                    <style type="text/css">
+                        %(css)s
+                    </style>
+                </head>
+                <body>
+                    %(body)s
+                </body>
+            </html>
+        ''' % {
+            'body': s.getvalue(),
+            'css': file('mpy-svn-stats.css').read(),
+        })
+
+        return True
+
 
 def main(argv):
     options, args = parse_opions()
@@ -141,26 +220,6 @@ def get_data(dbconn, input_stream, repo_url):
     handler = SAXLogHandler(dbconn, repo_url)
     parser = xml.sax.parse(input_stream, handler)
 
-def parse_date(str, type=datetime.datetime):
-    try:
-        year, month, day, hour, minute, second, microsecond = (0,) * 7
-        year = int(str[0:4])
-        month = int(str[5:7])
-        day = int(str[8:10])
-        hour = int(str[11:13])
-        minute = int(str[14:16])
-        second = int(str[17:19])
-#        microsecond = int(str[20:22])
-    except IndexError:
-        pass
-    return type(year, month, day, hour, minute, second)
-
-
-def ensure_date(s, type=datetime.datetime):
-    if isinstance(s, basestr):
-        return parse_date(s, type)
-    else:
-        return s
 
 if __name__ == '__main__':
     main(sys.argv)

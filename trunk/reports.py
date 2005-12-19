@@ -1,5 +1,11 @@
 """Define various reports."""
 
+import datetime
+import cgi
+from cStringIO import StringIO
+
+import db
+from common import parse_date, ensure_date
 
 class Report(object):
 
@@ -41,6 +47,17 @@ class ReportGroup(object):
         self.children.append(item)
         self.children_by_name[item.name] = item
 
+    def get_all_reports(self):
+        reports = []
+        for child in self.children:
+            if isinstance(child, Report):
+                reports += [child]
+            elif isinstance(child, ReportGroup):
+                reports += child.get_all_reports()
+            else:
+                raise ValueError("bad thing found in reports group")
+        return reports
+
 
 class SQLTableReport(Report):
     def __init__(self, name, title, sql, params):
@@ -50,6 +67,7 @@ class SQLTableReport(Report):
 
     def generate(self, paramstyle, cursor, format='html', with_links=True):
         db.execute(cursor=cursor, paramstyle=paramstyle, sql=self.sql, params=self.params)
+        if cursor.rowcount == -1: return ''
         return self.format_result(format, cursor, with_links)
 
     def format_result(self, format, cursor, with_links):
@@ -163,64 +181,6 @@ class GeneralStatsReport(Report):
         }
 
 
-class OnePageHTMLStatsGenerator(object):
-    """Generate html stats and put then on one page, like previous versions od
-    mpy-svn-stats did."""
-
-    def escape(self, s):
-        return cgi.escape(s)
-
-    def _write_menu(self, s, reports):
-        s.write('<div class="menu">\n')
-        s.write('\t<h2>Contents</h2>\n')
-        s.write('\t<ul>\n')
-        for report in reports:
-            s.write("\t\t<li><a href=\"#%s\">%s</a></li>\n" % (cgi.escape(report.name), cgi.escape(report.title)))
-        s.write('\t</ul>\n')
-        s.write('</div>')
-
-    def generate(self, options, reports, paramstyle, cursor):
-
-        s = StringIO()
-
-        s.write("<h1>Statistics for <em>%s</em></h1>\n" % self.escape(options.repo_url))
-        self._write_menu(s, reports)
-        s.write('<div class="reports">\n')
-        for report in reports:
-            html = report.generate(
-                cursor=cursor,
-                paramstyle=paramstyle,
-                format='html',
-                with_links=True
-            )
-            s.write(html)
-        s.write('</div>\n')
-
-        filename = 'index.html'
-        output_dir = options.output_dir
-
-        output_file = file(os.path.join(output_dir, filename), 'w')
-
-        output_file.write('''
-            <html>
-                <head>
-                    <title>stats</title>
-                    <style type="text/css">
-                        %(css)s
-                    </style>
-                </head>
-                <body>
-                    %(body)s
-                </body>
-            </html>
-        ''' % {
-            'body': s.getvalue(),
-            'css': file('mpy-svn-stats.css').read(),
-        })
-
-        return True
-
-
 class AllReports(ReportGroup):
     """All reports."""
 
@@ -231,14 +191,15 @@ class AllReports(ReportGroup):
         self.create_reports()
 
     def create_reports(self):
-        self.add(GeneralStatsReport())
-        self.add(SQLTableReport('count', 'Total Revision Count',
-                '''
-                    select count(*) from revision
-                    where rv_repo_url = $repo_url
-                   
-                ''', {'repo_url': options.repo_url}))
-        self.add(SQLTableReport('authors_by_commits', 'Authors by commits',
+        options = self.options
+        self.add(GeneralStatsReport(options.repo_url))
+        self.create_commits_reports()
+
+    def create_commits_reports(self):
+        group = ReportGroup(name='commits', title='Commits Statistics')
+        last_week = (datetime.datetime.now() - datetime.timedelta(7)).isoformat(' ')
+        last_month = (datetime.datetime.now() - datetime.timedelta(30)).isoformat(' ')
+        group.add(SQLTableReport('authors_by_commits', 'Authors by commits',
             '''
                 select rv_author as Author, count(*) as Count
                 from revision
@@ -246,6 +207,34 @@ class AllReports(ReportGroup):
                 group by rv_author
                 order by Count desc
 
-            ''', {'repo_url': options.repo_url}))
+            ''', {'repo_url': self.options.repo_url}))
+        group.add(SQLTableReport('authors_by_commits_month', 'Authors by commits - last month',
+            '''
+                select rv_author as Author, count(*) as Count
+                from revision
+                where rv_repo_url = $repo_url
+                and rv_timestamp >= $last_week
+                group by rv_author
+                order by Count desc
+
+            ''', {
+                'repo_url': self.options.repo_url,
+                'last_week': last_week,
+            }))
+        group.add(SQLTableReport('authors_by_commits_week', 'Authors by commits - last week',
+            '''
+                select rv_author as Author, count(*) as Count
+                from revision
+                where rv_repo_url = $repo_url
+                and rv_timestamp >= $last_month
+                group by rv_author
+                order by Count desc
+
+            ''', {
+                'repo_url': self.options.repo_url,
+                'last_month': last_month,
+            }))
+        self.add(group)
+
 
 
