@@ -49,7 +49,11 @@ class OnePageHTMLStatsGenerator(object):
 
         s = StringIO()
 
-        s.write("<h1>Statistics for <em>%s</em></h1>\n" % self.escape(options.repo_url))
+        s.write("""
+            <div class="header">
+                <h1>Statistics for <em>%s</em></h1>
+            </div>
+        """ % self.escape(options.repo_url))
         self._write_menu(s, reports)
         s.write('<div class="reports">\n')
         for report in reports.get_all_reports():

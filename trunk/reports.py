@@ -18,11 +18,13 @@ class Report(object):
     def __str__(self):
         return '%s(name=%s, title=%s)' % (self.__class__.__name__, self.name, self.title)
 
-    def make_links(self, with_links):
+    def html_make_links(self, with_links):
         if with_links:
             return """
-                <a name="%s"></a>
-                <a href="#top">go to top</a>
+                <div class="small_links">
+                    <a name="%s"></a>
+                    <a href="#top">go to top</a>
+                </div>
             """ % self.name
         else:
             return ""
@@ -67,7 +69,6 @@ class SQLTableReport(Report):
 
     def generate(self, paramstyle, cursor, format='html', with_links=True):
         db.execute(cursor=cursor, paramstyle=paramstyle, sql=self.sql, params=self.params)
-        if cursor.rowcount == -1: return ''
         return self.format_result(format, cursor, with_links)
 
     def format_result(self, format, cursor, with_links):
@@ -97,15 +98,15 @@ class SQLTableReport(Report):
     
         return ('''
             <div class="report">
-                %(links)s
                 <h2>%(title)s</h2>
+                %(links)s
                 %(table)s
             </div>
         ''' % {
             'stylesheet': self.html_stylesheet,
             'title': self.escape_html(self.title),
             'table': s.getvalue(),
-            'links': self.make_links(with_links),
+            'links': self.html_make_links(with_links),
         })
 
 
@@ -150,8 +151,8 @@ class GeneralStatsReport(Report):
     
         return '''
             <div class="report">
-                %(links)s
                 <h2>%(title)s</h2>
+                %(links)s
                 <p>
                     Repository URL: <b>%(url)s</b>.<br/>
                     Smallest revision number: %(smallest_rv_number)d.<br/>
@@ -177,7 +178,7 @@ class GeneralStatsReport(Report):
             'avg_per_day': avg_per_day,
             'avg_per_month': avg_per_month,
             'avg_per_year': avg_per_year,
-            'links': self.make_links(with_links),
+            'links': self.html_make_links(with_links),
         }
 
 

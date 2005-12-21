@@ -1,22 +1,20 @@
 
 
+default: mpy-svn-stats-stats
 
 
-all: mpy-svn-stats-stats
+mpy-svn-stats-stats-generate:
+	./mpyss.py -u svn://svn.berlios.de/mpy-svn-stats/ -r yes
 
-
-
-zope: zope-stats-download zope-stats-import zope-stats-generate
-
-
-mpy-svn-stats-stats: mpy-svn-stats.svnlog
+mpy-svn-stats-stats-import:
 	./mpyss.py -u svn://svn.berlios.de/mpy-svn-stats/ -i mpy-svn-stats.svnlog
 
+.PHONY: mpy-svn-stats.svnlog
 mpy-svn-stats.svnlog:
-	svn -v --xml svn://svn.berlios.de
+	svn -v --xml log svn://svn.berlios.de/mpy-svn-stats/ | ./filter.py > mpy-svn-stats.svnlog
 
-
-zope-stats-download:
+.PHONY: zope3.svnlog
+zope3.svnlog:
 	svn -v --xml log svn://svn.zope.org/repos/main/Zope3 | ./filter.py > zope3.svnlog
 
 zope-stats-import:
@@ -25,3 +23,7 @@ zope-stats-import:
 zope-stats-generate:
 	./mpyss.py -r yes -u svn://svn.zope.org/repos/main/Zope3
 
+
+
+tags:
+	exuberant-ctags -R *

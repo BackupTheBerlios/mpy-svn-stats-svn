@@ -3,7 +3,25 @@ body, td, li {
     font-size: 12px;
 }
 
+div.header {
+    position: absolute;
+    top: 2%;
+    height: 10%;
+    left: 2%;
+    right: 2%;
+}
+
 div.menu {
+    position: absolute;
+    left: 2%;
+    width: 30%;
+    top: 15%;
+    padding: 0;
+    margin: 0;
+}
+
+div.menu ul {
+    margin: 0;
 }
 
 div.menu a:link, div.menu a:active, div.menu a:visited {
@@ -11,6 +29,10 @@ div.menu a:link, div.menu a:active, div.menu a:visited {
 }
 
 div.reports {
+    position: absolute;
+    left: 34%;
+    width: 64%;
+    top: 15%;
 }
 
 div.reports table {
@@ -27,6 +49,15 @@ div.reports table tr th {
 div.reports table tr td {
     border: 1px solid black;
     padding: 2px 10px;
+}
+
+div.reports div.small_links {
+    float: right;
+    font-size: 90%;
+}
+
+div.reports div.small_links a {
+    color: black;
 }
 
 p.footer {
