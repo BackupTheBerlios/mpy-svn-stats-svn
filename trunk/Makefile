@@ -7,7 +7,7 @@ mpy-svn-stats-stats-generate:
 	./mpyss.py -u svn://svn.berlios.de/mpy-svn-stats/ -r yes
 
 mpy-svn-stats-stats-import:
-	./mpyss.py -u svn://svn.berlios.de/mpy-svn-stats/ -i mpy-svn-stats.svnlog
+	./mpyss.py -u svn://svn.berlios.de/mpy-svn-stats/ -i mpy-svn-stats.svnlog --no-reports
 
 .PHONY: mpy-svn-stats.svnlog
 mpy-svn-stats.svnlog:

@@ -89,7 +89,7 @@ class SQLTableReport(Report):
         for col in cursor.description:
             s.write('<th>%s</th>\n' % self.escape_html(col[0]))
         s.write('</tr>\n')
-        for row in cursor:
+        for row in cursor.fetchall():
             s.write('<tr>\n')
             for value in row:
                 s.write('\t<td>%s</td>\n' % self.escape_html(str(value)))
@@ -122,7 +122,8 @@ class GeneralStatsReport(Report):
             raise ValueError('unsupported format: %s' % format)
 
     def generate_html(self, cursor,  paramstyle=None, with_links=True):
-        cursor.execute(
+
+        db.execute(cursor, paramstyle,
             '''
                 select
                     min(rv_number),
@@ -198,8 +199,8 @@ class AllReports(ReportGroup):
 
     def create_commits_reports(self):
         group = ReportGroup(name='commits', title='Commits Statistics')
-        last_week = (datetime.datetime.now() - datetime.timedelta(7)).isoformat(' ')
-        last_month = (datetime.datetime.now() - datetime.timedelta(30)).isoformat(' ')
+        last_week = db.db_timestamp((datetime.datetime.now() - datetime.timedelta(7)))
+        last_month = db.db_timestamp((datetime.datetime.now() - datetime.timedelta(30)))
         group.add(SQLTableReport('authors_by_commits', 'Authors by commits',
             '''
                 select rv_author as Author, count(*) as Count
@@ -214,19 +215,6 @@ class AllReports(ReportGroup):
                 select rv_author as Author, count(*) as Count
                 from revision
                 where rv_repo_url = $repo_url
-                and rv_timestamp >= $last_week
-                group by rv_author
-                order by Count desc
-
-            ''', {
-                'repo_url': self.options.repo_url,
-                'last_week': last_week,
-            }))
-        group.add(SQLTableReport('authors_by_commits_week', 'Authors by commits - last week',
-            '''
-                select rv_author as Author, count(*) as Count
-                from revision
-                where rv_repo_url = $repo_url
                 and rv_timestamp >= $last_month
                 group by rv_author
                 order by Count desc
@@ -235,7 +223,36 @@ class AllReports(ReportGroup):
                 'repo_url': self.options.repo_url,
                 'last_month': last_month,
             }))
+        group.add(SQLTableReport('authors_by_commits_week', 'Authors by commits - last week',
+            '''
+                select rv_author as Author, count(*) as Count
+                from revision
+                where rv_repo_url = $repo_url
+                and rv_timestamp >= $last_week
+                group by rv_author
+                order by Count desc
+
+            ''', {
+                'repo_url': self.options.repo_url,
+                'last_week': last_week,
+            }))
         self.add(group)
 
 
 
+class SQLQuerySVGGraphReport(Report):
+    """Report that renders data coming from sql query as graph using svg technology."""
+
+    def __init__(self, name, title, sql, params):
+        Report.__init__(self, name, title)
+        self.sql = sql
+        self.params = params
+
+    def generate(self, cursor, paramstyle, format, with_links, output_dir):
+        """Generate report.
+        """
+
+        db.execute(cursor=cursor, paramstyle=paramstyle, sql=self.sql, params=self.params)
+        data = cursor.fetchall()
+
+        return ''

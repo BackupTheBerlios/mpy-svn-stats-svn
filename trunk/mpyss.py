@@ -155,12 +155,13 @@ class SAXLogHandler(xml.sax.handler.ContentHandler):
             self.date = self.current_characters
         elif name == 'msg':
             self.msg = self.current_characters
-        self.current_characters = ''
+        self.current_characters = u''
 
     def add_current_logentry(self):
+        db_module = db.db_module()
         number = self.number
         msg = self.msg
-        date = parse_date(self.date)
+        date = parse_date(self.date, db_module.Timestamp)
         author = self.author
 
         db.execute(self.cursor, db.paramstyle(),
@@ -188,9 +189,9 @@ class SAXLogHandler(xml.sax.handler.ContentHandler):
                     $comment)
             ''', {
                 'url': self.repo_url,
-                'number': number,
-                'author': author,
-                'comment': msg,
+                'number': db_module.NUMBER(number),
+                'author': author.encode('utf-8'),
+                'comment': msg.encode('utf-8'),
                 'timestamp': date
         })
 
@@ -200,7 +201,10 @@ class SAXLogHandler(xml.sax.handler.ContentHandler):
 def parse_opions():
     parser = optparse.OptionParser()
     parser.add_option("-u", "--url", dest="repo_url", help="Reporitory URL")
-    parser.add_option("-r", "--reports", dest="reports", help="Generate reports", default=True)
+    parser.add_option("-r", "--reports", action="store_true",
+        dest="reports", help="Generate reports", default=False)
+    parser.add_option("--no-reports", action="store_false",
+        dest="reports", help="Do not generate reports")
     parser.add_option("-p", "--parse", dest="parse", help="Parse log file", default=False)
     parser.add_option("-i", "--input", dest="input",
         help="Input source file name (use - for standard input)",
@@ -218,7 +222,9 @@ def parse_opions():
         options.parse = True
     if options.parse and not options.input:
         options.input = '-'
+    
     return (options, args)
+
 
 def get_data(dbconn, input_stream, repo_url):
     handler = SAXLogHandler(dbconn, repo_url)

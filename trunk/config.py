@@ -1,7 +1,8 @@
 # config module. module globals define settings.
 
-from pysqlite2 import dbapi2 as sqlite
+#from pysqlite2 import dbapi2 as sqlite
+import psycopg
 
-db_module = sqlite
-db_connection_params = ['mpyss.sqlite']
+db_module = psycopg 
+db_connection_params = ['dbname=mpyss user=mpyss']
 

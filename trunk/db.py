@@ -13,6 +13,9 @@ def connect():
     assert conn is not None
     return conn
 
+def db_module():
+    return config.db_module
+
 def paramstyle():
     return config.db_module.paramstyle
 
@@ -20,6 +23,8 @@ def execute(cursor, paramstyle, sql, params=None):
     """Execute something on cursor, but be paramstyle aware."""
     if params:
         sql, params = convert_params(paramstyle, sql, params)
+        print "sql: ", sql
+        print "params: ", params
         return cursor.execute(sql, params)
     else:
         return cursor.execute(sql)
@@ -60,5 +65,9 @@ def convert_params_pyformat(sql, params):
         sql_pyformat_repl[name] = '%%(%s)s' % name
     pyformat_sql = template.substitute(sql_pyformat_repl)
     return pyformat_sql, params
+
+
+def db_timestamp(dt):
+    return db_module().Timestamp(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
 
 
