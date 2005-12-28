@@ -18,16 +18,15 @@ class Report(object):
     def __str__(self):
         return '%s(name=%s, title=%s)' % (self.__class__.__name__, self.name, self.title)
 
-    def html_make_links(self, with_links):
+    def go_to_top_link(self, with_links):
         if with_links:
-            return """
+            return u"""
                 <div class="small_links">
-                    <a name="%s"></a>
                     <a href="#top">go to top</a>
                 </div>
-            """ % self.name
+            """
         else:
-            return ""
+            return ''
 
 
 class ReportGroup(object):
@@ -98,15 +97,17 @@ class SQLTableReport(Report):
     
         return ('''
             <div class="report">
+                <a name="%(anchor_name)s"></a>
                 <h2>%(title)s</h2>
-                %(links)s
+                %(go_to_top_link)s
                 %(table)s
             </div>
         ''' % {
             'stylesheet': self.html_stylesheet,
             'title': self.escape_html(self.title),
             'table': s.getvalue(),
-            'links': self.html_make_links(with_links),
+            'go_to_top_link': self.go_to_top_link(with_links),
+            'anchor_name': self.name,
         })
 
 
@@ -152,8 +153,9 @@ class GeneralStatsReport(Report):
     
         return '''
             <div class="report">
+                <a name="%(anchor_name)s"></a>
                 <h2>%(title)s</h2>
-                %(links)s
+                %(go_to_top_link)s
                 <p>
                     Repository URL: <b>%(url)s</b>.<br/>
                     Smallest revision number: %(smallest_rv_number)d.<br/>
@@ -179,7 +181,8 @@ class GeneralStatsReport(Report):
             'avg_per_day': avg_per_day,
             'avg_per_month': avg_per_month,
             'avg_per_year': avg_per_year,
-            'links': self.html_make_links(with_links),
+            'anchor_name': self.name,
+            'go_to_top_link': self.go_to_top_link(with_links),
         }
 
 

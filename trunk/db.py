@@ -23,8 +23,8 @@ def execute(cursor, paramstyle, sql, params=None):
     """Execute something on cursor, but be paramstyle aware."""
     if params:
         sql, params = convert_params(paramstyle, sql, params)
-        print "sql: ", sql
-        print "params: ", params
+#        print "sql: ", sql
+#        print "params: ", params
         return cursor.execute(sql, params)
     else:
         return cursor.execute(sql)

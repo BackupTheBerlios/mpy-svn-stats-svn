@@ -1,23 +1,10 @@
 
+body {
+    padding: 1em 2em;
+}
+
 body, td, li {
     font-size: 12px;
-}
-
-div.header {
-    position: absolute;
-    top: 2%;
-    height: 10%;
-    left: 2%;
-    right: 2%;
-}
-
-div.menu {
-    position: absolute;
-    left: 2%;
-    width: 30%;
-    top: 15%;
-    padding: 0;
-    margin: 0;
 }
 
 div.menu ul {
@@ -29,10 +16,6 @@ div.menu a:link, div.menu a:active, div.menu a:visited {
 }
 
 div.reports {
-    position: absolute;
-    left: 34%;
-    width: 64%;
-    top: 15%;
 }
 
 div.reports table {
