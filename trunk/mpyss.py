@@ -103,7 +103,7 @@ class OnePageHTMLStatsGenerator(object):
             </html>
         ''' % {
             'body': s.getvalue(),
-            'css': file('mpy-svn-stats.css').read(),
+            'css': file('mpyss.css').read(),
             'time_generated': time_generated_end,
             'seconds': generated_in.seconds,
         })

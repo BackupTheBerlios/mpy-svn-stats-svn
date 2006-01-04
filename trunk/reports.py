@@ -241,6 +241,9 @@ class AllReports(ReportGroup):
             }))
         self.add(group)
 
+    def create_number_of_changed_paths_reports(self):
+        group = ReportGroup(name='changed_paths', title='Changed Paths Statistics')
+        self.add(group)
 
 
 class SQLQuerySVGGraphReport(Report):
