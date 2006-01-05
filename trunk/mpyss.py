@@ -182,10 +182,19 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
 
     def add_current_logentry(self):
         db_module = db.db_module()
-        number = self.number
+        number = int(self.number)
         msg = self.msg
         date = parse_date(self.date, db_module.Timestamp)
         author = self.author
+
+        db.execute(self.cursor, db.paramstyle(),
+            '''
+                delete from changed_path where
+                    rv_repo_url = $url and rv_number = $number
+            ''', {
+                'url': self.repo_url,
+                'number': number,
+        })
 
         db.execute(self.cursor, db.paramstyle(),
             '''
