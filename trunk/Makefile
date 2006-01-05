@@ -23,5 +23,6 @@ zope3-stats-import:
 zope3-stats-generate:
 	./mpyss.py -r -u svn://svn.zope.org/repos/main/Zope3
 
+.PHONY: tags
 tags:
 	exuberant-ctags -R *

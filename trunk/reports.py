@@ -186,6 +186,43 @@ class GeneralStatsReport(Report):
         }
 
 
+class GroupByAndCountSQLReport(SQLTableReport):
+    """Group by report.
+    Usually tabular representation of some simple aggregation is required.
+
+    XXX
+
+    """
+    
+    def __init__(self, name, title, group_by):
+        sql, params = self.__make_sql(group_by=group_by)
+        SQLTableReport.__init__(self, name, title, sql, params)
+
+    def __make_sql(self, group_by):
+        """Create standard "group by" sql code.
+        group_by parameter is trusted - it's pasted directly into sql code.
+
+        """
+
+        sql = '''
+                select %(group_by)s, count(*) as Count
+                from revision
+                where rv_repo_url = $repo_url
+                and rv_timestamp >= $last_month
+                group by %(group_by)s
+                order by Count desc
+
+        ''' % {
+                'group_by': group_by,
+        }
+        params = {
+                'repo_url': self.options.repo_url,
+                'last_month': last_month,
+        }
+
+        return sql, params
+
+
 class AllReports(ReportGroup):
     """All reports."""
 

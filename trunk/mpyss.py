@@ -135,7 +135,7 @@ def generate_reports(options, conn):
     generator.generate(options, reports, db.paramstyle(), cursor)
 
 
-class SAXLogHandler(xml.sax.handler.ContentHandler):
+class SAXLogParserHandler(xml.sax.handler.ContentHandler):
     """Parser used to copy data from xml log to sql database."""
 
     def __init__(self, dbconn, repo_url):
@@ -143,6 +143,7 @@ class SAXLogHandler(xml.sax.handler.ContentHandler):
         self.repo_url = repo_url
         self.dbconn = dbconn
         self.cursor = self.dbconn.cursor()
+        self.paths = None
 
     def startDocument(self):
         print "starting document"
@@ -157,6 +158,9 @@ class SAXLogHandler(xml.sax.handler.ContentHandler):
             self.msg = None
             self.author = None
             self.date = None
+            self.paths = []
+        elif name == 'path':
+            self.current_path_action = attrs['action']
 
     def characters(self, content):
         self.current_characters += content
@@ -170,6 +174,10 @@ class SAXLogHandler(xml.sax.handler.ContentHandler):
             self.date = self.current_characters
         elif name == 'msg':
             self.msg = self.current_characters
+        elif name == 'path':
+            self.current_path_path = self.current_characters
+            self.paths.append((self.current_path_action, self.current_path_path))
+            self.current_path_action = None
         self.current_characters = u''
 
     def add_current_logentry(self):
@@ -210,6 +218,27 @@ class SAXLogHandler(xml.sax.handler.ContentHandler):
                 'timestamp': date
         })
 
+        for action, path in self.paths:
+            db.execute(self.cursor, db.paramstyle(),
+            '''
+                insert into changed_path (
+                    rv_repo_url,
+                    rv_number,
+                    cp_action,
+                    cp_path)
+                values (
+                    $url,
+                    $number,
+                    $action,
+                    $path)
+            ''',{
+                'url': self.repo_url,
+                'number': db_module.NUMBER(self.number),
+                'action': action.encode('utf-8'),
+                'path': path.encode('utf-8'),
+            })
+
+
         self.dbconn.commit()
 
 
@@ -242,7 +271,7 @@ def parse_opions():
 
 
 def get_data(dbconn, input_stream, repo_url):
-    handler = SAXLogHandler(dbconn, repo_url)
+    handler = SAXLogParserHandler(dbconn, repo_url)
     parser = xml.sax.parse(input_stream, handler)
 
 
