@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.4
+#!/usr/bin/env python2.5
 # coding: utf-8
 
 import sys, os, time, re, os.path
@@ -221,7 +221,7 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
                     $comment)
             ''', {
                 'url': self.repo_url,
-                'number': db_module.NUMBER(number),
+                'number': int(number),
                 'author': author.encode('utf-8'),
                 'comment': msg.encode('utf-8'),
                 'timestamp': date
@@ -242,7 +242,7 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
                     $path)
             ''',{
                 'url': self.repo_url,
-                'number': db_module.NUMBER(self.number),
+                'number': int(self.number),
                 'action': action.encode('utf-8'),
                 'path': path.encode('utf-8'),
             })

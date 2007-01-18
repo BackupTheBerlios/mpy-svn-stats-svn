@@ -118,12 +118,11 @@ class GeneralStatsReport(Report):
 
     def generate(self, cursor, paramstyle, format='html', with_links=True):
         if format == 'html':
-            return self.generate_html(cursor=cursor, paramstyle=with_links)
+            return self.generate_html(cursor=cursor, paramstyle=paramstyle, with_links=with_links)
         else:
             raise ValueError('unsupported format: %s' % format)
 
     def generate_html(self, cursor,  paramstyle=None, with_links=True):
-
         db.execute(cursor, paramstyle,
             '''
                 select

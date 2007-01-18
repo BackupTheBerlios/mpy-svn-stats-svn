@@ -36,8 +36,10 @@ def convert_params(paramstyle, sql, params):
     """
     if paramstyle == 'qmark':
         return convert_params_qmark(sql, params)
-    else:
+    elif paramstyle == 'pyformat':
         return convert_params_pyformat(sql, params)
+    else:
+        raise Exception("paramstyle \"%s\" is not implemented" % paramstyle)
 
 def convert_params_qmark(sql, params):
     """Convert template style params to qmark style params."""
