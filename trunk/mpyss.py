@@ -8,6 +8,7 @@ import xml.sax.handler
 import cgi
 import datetime
 from cStringIO import StringIO
+from textwrap import dedent
 
 import config
 import db
@@ -16,8 +17,9 @@ from common import parse_date, ensure_date
 
 
 class OnePageHTMLStatsGenerator(object):
-    """Generate html stats and put then on one page, like previous versions od
-    mpy-svn-stats did."""
+    """Generate html stats and put then on one page,
+    like previous versions of mpy-svn-stats did.
+    """
 
     def escape(self, s):
         return cgi.escape(s)
@@ -74,7 +76,7 @@ class OnePageHTMLStatsGenerator(object):
         s.write('</div>\n')
 
 
-        filename = 'index.html'
+        filename = 'index.xhtml'
         output_dir = options.output_dir
 
         output_file = file(os.path.join(output_dir, filename), 'w')
@@ -83,8 +85,10 @@ class OnePageHTMLStatsGenerator(object):
 
         generated_in = time_generated_end - time_generated_start
 
-        output_file.write('''
-            <html>
+        output_file.write(dedent('''\
+            <html xmlns="http://www.w3.org/1999/xhtml"
+                    xmlns:svg="http://www.w3.org/2000/svg"
+                    xml:lang="en">
                 <head>
                     <title>stats</title>
                     <style type="text/css">
@@ -101,7 +105,7 @@ class OnePageHTMLStatsGenerator(object):
                     </p>
                 </body>
             </html>
-        ''' % {
+        ''') % {
             'body': s.getvalue(),
             'css': file('mpyss.css').read(),
             'time_generated': time_generated_end,

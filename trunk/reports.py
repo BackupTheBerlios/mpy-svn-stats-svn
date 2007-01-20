@@ -5,6 +5,7 @@ import cgi
 from cStringIO import StringIO
 
 import db
+import svg
 from common import parse_date, ensure_date
 
 class Report(object):
@@ -275,6 +276,7 @@ class AllReports(ReportGroup):
                 'repo_url': self.options.repo_url,
                 'last_week': last_week,
             }))
+        group.add(CommitsByAuthorsGraphReport(repo_url=self.options.repo_url))
         self.add(group)
 
     def create_number_of_changed_paths_reports(self):
@@ -282,19 +284,58 @@ class AllReports(ReportGroup):
         self.add(group)
 
 
-class SQLQuerySVGGraphReport(Report):
-    """Report that renders data coming from sql query as graph using svg technology."""
+class CommitsByAuthorsGraphReport(Report):
+    """Graph number of commits committers made."""
 
-    def __init__(self, name, title, sql, params):
-        Report.__init__(self, name, title)
-        self.sql = sql
-        self.params = params
+    def __init__(self, repo_url):
+        Report.__init__(self, 'commits_by_authors_graph', 'Commits by Authors')
+        self.repo_url = repo_url
 
-    def generate(self, cursor, paramstyle, format, with_links, output_dir):
-        """Generate report.
-        """
+    def _get_authors(self, repo_url, cursor, paramstyle):
+        sql = 'select distinct rv_author from revision where rv_repo_url = $url'
+        params = {'url': repo_url}
+        db.execute(cursor=cursor, paramstyle=paramstyle, sql=sql, params=params)
+        return [r[0] for r in cursor.fetchall()]
 
-        db.execute(cursor=cursor, paramstyle=paramstyle, sql=self.sql, params=self.params)
-        data = cursor.fetchall()
+    def _get_data(self, repo_url, cursor, paramstyle):
+        sql = '''
+            select rv_author, substr(rv_timestamp, 1, 7), count(*)
+            from revision
+            where rv_repo_url = $url
+            group by substr(rv_timestamp, 1, 7), rv_author
+        '''
+        params = {'url': repo_url}
+        db.execute(cursor=cursor, paramstyle=paramstyle, sql=sql, params=params)
+        r = [(x[0], parse_date(x[1]), x[2]) for x in cursor]
+        return r
 
-        return ''
+
+    def generate(self, cursor, paramstyle, format='html', with_links=True):
+        graph = svg.Graph()
+        graph.ox_axis_title = 'Date'
+        graph.oy_axis_title = 'Count'
+        graph.add_series('foo')
+        authors = self._get_authors(self.repo_url, cursor, paramstyle)
+        for author in authors:
+            graph.add_series(author)
+        for author, date, count in self._get_data(self.repo_url, cursor, paramstyle):
+            graph.add_value(author, date, count)
+        s = StringIO()
+        graph.render_to_stream(s)
+        svg_content = s.getvalue()
+        return """
+            <div class="report">
+                <a name="%(anchor_name)s"></a>
+                <h2>%(title)s</h2>
+                %(go_to_top_link)s
+                <p>
+                    %(svg_content)s
+                </p>
+            </div>
+        """ % {
+            'title': self.title,
+            'anchor_name': self.name,
+            'go_to_top_link': self.go_to_top_link(with_links),
+            'svg_content': svg_content,
+        }
+
