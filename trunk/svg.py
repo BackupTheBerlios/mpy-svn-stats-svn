@@ -3,6 +3,7 @@
 
 import os, sys, time, string
 import datetime
+import common
 from cStringIO import StringIO
 from textwrap import dedent
 
@@ -189,6 +190,13 @@ class Graph:
 
     def get_series_color(self, series_name):
         return self.series_colors.get(series_name, 'black')
+
+    def randomize_series_colors(self):
+        colors = common.make_colors(self.series)
+        for name, color in colors.iteritems():
+            assert len(color) == 3
+            svg_color = "#%02x%02x%02x" % tuple(color)
+            self.series_colors[name] = svg_color
 
 
 def main():

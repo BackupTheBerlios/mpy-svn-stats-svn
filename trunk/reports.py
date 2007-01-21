@@ -309,7 +309,6 @@ class CommitsByAuthorsGraphReport(Report):
         r = [(x[0], parse_date(x[1]), x[2]) for x in cursor]
         return r
 
-
     def generate(self, cursor, paramstyle, format='html', with_links=True):
         graph = svg.Graph()
         graph.ox_axis_title = 'Date'
@@ -318,6 +317,7 @@ class CommitsByAuthorsGraphReport(Report):
         authors = self._get_authors(self.repo_url, cursor, paramstyle)
         for author in authors:
             graph.add_series(author)
+        graph.randomize_series_colors()
         for author, date, count in self._get_data(self.repo_url, cursor, paramstyle):
             graph.add_value(author, date, count)
         s = StringIO()
