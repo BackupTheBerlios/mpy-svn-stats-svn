@@ -72,4 +72,3 @@ def convert_params_pyformat(sql, params):
 def db_timestamp(dt):
     return db_module().Timestamp(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
 
-

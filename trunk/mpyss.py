@@ -252,7 +252,7 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
             })
 
 
-        self.dbconn.commit()
+#        self.dbconn.commit()
 
 
 def parse_opions():
@@ -285,6 +285,7 @@ def parse_opions():
 
 def get_data(dbconn, input_stream, repo_url):
     handler = SAXLogParserHandler(dbconn, repo_url)
+    dbconn.commit()
     parser = xml.sax.parse(input_stream, handler)
 
 
