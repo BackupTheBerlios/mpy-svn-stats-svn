@@ -9,6 +9,7 @@ import cgi
 import datetime
 from cStringIO import StringIO
 from textwrap import dedent
+from ConfigParser import ConfigParser
 
 import config
 import db
@@ -116,11 +117,12 @@ class OnePageHTMLStatsGenerator(object):
 
 
 def main(argv):
-    options, args = parse_opions()
+    options, args = parse_options()
     conn = db.connect()
     if options.parse:
         print "parsing"
         if options.input == '-':
+            print "reading from stdin"
             input = sys.stdin
         else:
             input = file(options.input)
@@ -255,7 +257,7 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
 #        self.dbconn.commit()
 
 
-def parse_opions():
+def parse_options():
     parser = optparse.OptionParser()
     parser.add_option("-u", "--url", dest="repo_url", help="Reporitory URL")
     parser.add_option("-r", "--reports", action="store_true",
@@ -270,6 +272,29 @@ def parse_opions():
         help='Output directory (default: %default)')
     parser.add_option('-s', '--output-formats', dest='output_formats', default='html',
         help='Output formats, comma separated list  (default: %default, possible values: html)')
+
+    def handle_config_option(option, opt_str, filename, parser):
+        print "loading config file \"%s\"" % filename
+        cp = ConfigParser()
+        cp.read(filename)
+        s = cp.sections()[0]
+        print "using section \"%s\"" % s
+        if cp.has_option(s, 'url'):
+            parser.values.repo_url = cp.get(s, 'url')
+            print "url from config file: \"%s\"" % parser.values.repo_url
+        parse = cp.get(s, 'parse', False)
+        if parse:
+            parser.values.parse = parse
+        reports = cp.get(s, 'reports', False)
+        if reports:
+            parser.values.reports = reports
+        input = cp.get(s, 'input', None)
+        if input:
+            parser.values.input = input
+
+    parser.add_option('-c', '--config', type='string', default=None, action='callback',
+        callback=handle_config_option,
+        help='Config file')
 
     options, args = parser.parse_args()
 
