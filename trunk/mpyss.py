@@ -128,7 +128,10 @@ def main(argv):
             input = file(options.input)
         get_data(conn, input, options.repo_url)
     if options.reports:
+        print "generating reports"
         generate_reports(options, conn)
+    else:
+        print "not generating reports"
 
 
 def generate_reports(options, conn):
@@ -254,9 +257,6 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
             })
 
 
-#        self.dbconn.commit()
-
-
 def parse_options():
     parser = optparse.OptionParser()
     parser.add_option("-u", "--url", dest="repo_url", help="Reporitory URL")
@@ -264,7 +264,10 @@ def parse_options():
         dest="reports", help="Generate reports")
     parser.add_option("--no-reports", action="store_false",
         dest="reports", help="Do not generate reports")
-    parser.add_option("-p", "--parse", dest="parse", help="Parse log file", default=False)
+    parser.add_option("-p", "--parse", action="store_true",
+        dest="parse", help="Parse logs")
+    parser.add_option("--no-parse", action="store_false",
+        dest="parse", help="Do not parse logs")
     parser.add_option("-i", "--input", dest="input",
         help="Input source file name (use - for standard input)",
         default=None)
@@ -310,8 +313,8 @@ def parse_options():
 
 def get_data(dbconn, input_stream, repo_url):
     handler = SAXLogParserHandler(dbconn, repo_url)
-    dbconn.commit()
     parser = xml.sax.parse(input_stream, handler)
+    dbconn.commit()
 
 
 if __name__ == '__main__':
