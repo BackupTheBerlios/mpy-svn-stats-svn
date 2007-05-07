@@ -87,11 +87,12 @@ class Graph:
             for i in range(2):
                 try:
                     p[i] = tonumber(d[i] - min[i]) / tonumber(max[i] - min[i])
-                except TypeError, e:
+                except (ZeroDivisionError, TypeError), e:
                     print 'self.data: ', repr(self.data)
+                    print 'i: %s' % i
                     print 'd: ', repr(d)
-                    print repr(min)
-                    print repr(max)
+                    print 'min: %s' % repr(min)
+                    print 'max: %s' % repr(max)
                     raise e
             return p
         pts = [pos(d) for d in dd]

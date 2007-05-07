@@ -297,7 +297,7 @@ class CommitsByAuthorsGraphReport(Report):
         db.execute(cursor=cursor, paramstyle=paramstyle, sql=sql, params=params)
         return [r[0] for r in cursor.fetchall()]
 
-    def _get_data(self, repo_url, cursor, paramstyle):
+    def _get_data_db(self, repo_url, cursor, paramstyle):
         sql = '''
             select rv_author, substr(rv_timestamp, 1, 7), count(*)
             from revision
@@ -308,6 +308,42 @@ class CommitsByAuthorsGraphReport(Report):
         db.execute(cursor=cursor, paramstyle=paramstyle, sql=sql, params=params)
         r = [(x[0], parse_date(x[1]), x[2]) for x in cursor]
         return r
+
+    def _get_data(self, repo_url, cursor, paramstyle):
+        data = self._get_data_db(repo_url, cursor, paramstyle)
+        date_dict = {}
+        author_date_range = {}
+        all_authors = set()
+        for t in data:
+            author = t[0]
+            date = t[1]
+            if date not in date_dict:
+                date_dict[date] = {}
+            date_dict[date][author] = t
+            if author not in author_date_range:
+                author_date_range[author] = (date, date)
+            else:
+                min_date, max_date = author_date_range[author]
+                if date < min_date: min_date = date
+                elif date > max_date: max_date = date
+                author_date_range[author] = (min_date, max_date)
+            if author not in all_authors: all_authors.add(author)
+        better_data = []
+        min_date = min(t[1] for t in data)
+        max_date = max(t[1] for t in data)
+        date = min_date
+        while date <= max_date:
+            for author in all_authors:
+                if date in date_dict and author in date_dict[date]:
+                    better_data.append(date_dict[date][author])
+                elif date >= author_date_range[author][0] and date <= author_date_range[author][1]:
+                    better_data.append((author, date, 0))
+                if date not in date_dict:
+                    print "something bad, date %s not found in date_dict" % date
+            # go to next month; XXX write something smarter
+            date += datetime.timedelta(days=1)
+            while date.day != 1: date += datetime.timedelta(days=1) 
+        return better_data
 
     def generate(self, cursor, paramstyle, format='html', with_links=True):
         graph = svg.Graph()

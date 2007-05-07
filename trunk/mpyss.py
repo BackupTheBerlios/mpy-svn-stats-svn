@@ -294,6 +294,9 @@ def parse_options():
         input = cp.get(s, 'input', None)
         if input:
             parser.values.input = input
+        output_dir = cp.get(s, 'output_dir', None)
+        if output_dir: parser.values.output_dir = output_dir
+            
 
     parser.add_option('-c', '--config', type='string', default=None, action='callback',
         callback=handle_config_option,
@@ -303,8 +306,8 @@ def parse_options():
 
     if not options.repo_url: parser.error('Please specify repository url with -u.')
 
-    if options.input:
-        options.parse = True
+    if options.input and not options.parse:
+        print "warning: input defined, but parse is not set - not parsing!"
     if options.parse and not options.input:
         options.input = '-'
     
