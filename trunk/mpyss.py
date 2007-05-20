@@ -66,6 +66,7 @@ class OnePageHTMLStatsGenerator(object):
             try:
                 html = report.generate(
                     cursor=cursor,
+                    options=options,
                     paramstyle=paramstyle,
                     format='html',
                     with_links=True
@@ -86,12 +87,17 @@ class OnePageHTMLStatsGenerator(object):
 
         generated_in = time_generated_end - time_generated_start
 
-        output_file.write(dedent('''\
+        title = "MPY-SVN-STATS for %s" % options.repo_url
+
+        output_file.write(dedent("""\
+            <!DOCTYPE html PUBLIC
+                "-//W3C//DTD XHTML 1.1 plus MathML 2.0 plus SVG 1.1//EN"
+                "http://www.w3.org/2002/04/xhtml-math-svg/xhtml-math-svg-flat.dtd">
             <html xmlns="http://www.w3.org/1999/xhtml"
-                    xmlns:svg="http://www.w3.org/2000/svg"
                     xml:lang="en">
                 <head>
-                    <title>stats</title>
+                    <title>%(title)s</title>
+                    <meta http-equiv="Content-Type" content="text/xhtml; charset=utf-8" />
                     <style type="text/css">
                         %(css)s
                     </style>
@@ -106,11 +112,12 @@ class OnePageHTMLStatsGenerator(object):
                     </p>
                 </body>
             </html>
-        ''') % {
+        """) % {
             'body': s.getvalue(),
             'css': file('mpyss.css').read(),
             'time_generated': time_generated_end,
             'seconds': generated_in.seconds,
+            'title': title,
         })
 
         return True

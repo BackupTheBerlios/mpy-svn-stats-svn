@@ -23,7 +23,11 @@ def tonumber(x):
     elif isinstance(x, (int, long, float)):
         return float(x)
 
+
 class Graph:
+
+    static_graph_count = 0
+
     def __init__(self, width=800, height=200,
             margin=20,
             ox_axis_title='',
@@ -36,6 +40,8 @@ class Graph:
         self.series_colors = {}
         self.data = {}
         self.series = set()
+        self.local_graph_id = Graph.static_graph_count
+        Graph.static_graph_count += 1
 
     def add_series(self, series_name):
         self.series.add(series_name)
@@ -44,36 +50,72 @@ class Graph:
         assert series_name in self.series
         self.data[(series_name, key)] = value
 
-    def render_to_stream(self, stream):
-        stream.write(template('''
-            <svg id="svg" width="$width" height="$height" version="1.1"
-                    xmlns="http://www.w3.org/2000/svg">
-
+    def render_to_stream(self, stream, standalone=False):
+        if standalone:
+            stream.write('''\
+                <?xml version="1.0" encoding="utf-8"?>
+                <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" 
+                         "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+            ''')
+        stream.write(template('''\
+            <svg:svg
+                xmlns:svg="http://www.w3.org/2000/svg"
+                xmlns:xlink="http://www.w3.org/1999/xlink"
+                width="$width" height="$height" version="1.1">
         ''', {'width': self.width, 'height': self.height}))
 
         self.render_axes(stream)
-
 
         for series_name in self.series:
             self.render_series(stream, series_name)
 
         stream.write(template('''
-            </svg>
+            </svg:svg>
         '''))
 
     def render_series(self, stream, series_name):
         points = self.get_points_by_series_name(series_name)
-        stream.write(template("""
-            <polyline id="line" style="stroke: $series_color; stroke-width: 1.234; fill: none"
-        """, {'series_color': self.get_series_color(series_name)}))
-        stream.write('points="\n')
+#        stream.write(template("""
+#            <polyline id="line" style="stroke: $series_color; stroke-width: 1.234; fill: none"
+#        """, {'series_color': self.get_series_color(series_name)}))
+        stream.write("""\
+            <svg:defs>
+                <svg:path id="path_%(graph_id)d_%(series_name)s"
+                        fill="none" stroke="%(series_color)s" 
+                        stroke-width="1.5"
+            """  % {'graph_id': self.local_graph_id,
+                'series_name': series_name,
+                'series_color': self.get_series_color(series_name)})
+        stream.write('d="\n')
         def point_to_pixel(p):
             x = p[0] * (self.width - self.margin * 2) + self.margin
             y = self.height - p[1] * (self.height - self.margin * 2) - self.margin
-            return x,y
-        points_str = '\n'.join(["%.2f %.2f" % point_to_pixel(p) for p in points])
+            return "%.2f %.2f" % (x,y)
+        points_str = '\n'.join(
+                    "%s %s" % (('M' if n==0 else 'L'), point_to_pixel(p))
+                    for n,p in enumerate(points))
         stream.write(points_str)
-        stream.write('"/>')
+        stream.write('"/>\n')
+        stream.write('</svg:defs>\n');
+
+        stream.write("""<svg:use xlink:href="#path_%(graph_id)d_%(series_name)s"/>""" % {
+                'graph_id': self.local_graph_id,
+                'series_name': series_name,
+                'series_title': series_name})
+
+        stream.write("""
+                <svg:text font-family="Deja Vu Sans, Arial"
+                        font-size="8pt"
+                        fill="black"
+                        dy="-1pt">
+                    <svg:textPath
+                        xlink:href="#path_%(graph_id)d_%(series_name)s"
+                    >%(series_title)s</svg:textPath>
+                </svg:text>
+            """ % {
+                'graph_id': self.local_graph_id,
+                'series_name': series_name,
+                'series_title': series_name,})
 
     def get_points_by_series_name(self, series_name):
         dd = [(x[0][1], x[1]) for x in self.data.iteritems() if x[0][0] == series_name]
@@ -142,7 +184,7 @@ class Graph:
             style="text-anchor: end"
             text = self.ox_axis_title
             stream.write(template('''
-                <text x="$x" y="$y" dy="11pt" style="$style">$text</text>
+                <svg:text x="$x" y="$y" dy="11pt" style="$style">$text</svg:text>
             ''', {
                 'x': x,
                 'y': y,
@@ -156,10 +198,10 @@ class Graph:
             style="text-anchor: end"
             text = self.oy_axis_title
             stream.write(template('''
-                <g transform="translate($x, $y), rotate(-90)">
-                    <text dy="-4pt" style="$style"
-                    >$text</text>
-                </g>
+                <svg:g transform="translate($x, $y), rotate(-90)">
+                    <svg:text dy="-4pt" style="$style"
+                    >$text</svg:text>
+                </svg:g>
             ''', {
                 'x': x,
                 'y': y,
@@ -170,7 +212,7 @@ class Graph:
     def svg_line(self, stream, p, style='stoke:'):
         assert len(p) == 2
         stream.write(template('''
-            <line x1="$x1" y1="$y1" x2="$x2" y2="$y2" style="$style"/>
+            <svg:line x1="$x1" y1="$y1" x2="$x2" y2="$y2" style="$style"/>
         ''', {
             'x1': p[0][0],
             'y1': p[0][1],
@@ -181,7 +223,7 @@ class Graph:
 
     def svg_text(self, stream, text, x, y, style=''):
         stream.write(template('''
-            <text x="$x" y="$y" style="$style">$text</text>
+            <svg:text x="$x" y="$y" style="$style">$text</svg:text>
         ''', {
             'x': x,
             'y': y,

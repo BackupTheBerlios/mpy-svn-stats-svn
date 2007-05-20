@@ -67,7 +67,7 @@ class SQLTableReport(Report):
         self.sql = sql
         self.params = params
 
-    def generate(self, paramstyle, cursor, format='html', with_links=True):
+    def generate(self, paramstyle, cursor, options, format='html', with_links=True):
         db.execute(cursor=cursor, paramstyle=paramstyle, sql=self.sql, params=self.params)
         return self.format_result(format, cursor, with_links)
 
@@ -98,7 +98,7 @@ class SQLTableReport(Report):
     
         return ('''
             <div class="report">
-                <a name="%(anchor_name)s"></a>
+                <a id="%(anchor_name)s"></a>
                 <h2>%(title)s</h2>
                 %(go_to_top_link)s
                 %(table)s
@@ -117,7 +117,7 @@ class GeneralStatsReport(Report):
         Report.__init__(self, 'general', 'General Statistics')
         self.repo_url = repo_url
 
-    def generate(self, cursor, paramstyle, format='html', with_links=True):
+    def generate(self, cursor, paramstyle, options, format='html', with_links=True):
         if format == 'html':
             return self.generate_html(cursor=cursor, paramstyle=paramstyle, with_links=with_links)
         else:
@@ -153,7 +153,7 @@ class GeneralStatsReport(Report):
     
         return '''
             <div class="report">
-                <a name="%(anchor_name)s"></a>
+                <a id="%(anchor_name)s"></a>
                 <h2>%(title)s</h2>
                 %(go_to_top_link)s
                 <p>
@@ -345,7 +345,7 @@ class CommitsByAuthorsGraphReport(Report):
             while date.day != 1: date += datetime.timedelta(days=1) 
         return better_data
 
-    def generate(self, cursor, paramstyle, format='html', with_links=True):
+    def generate(self, cursor, paramstyle, options, format='html', with_links=True):
         graph = svg.Graph()
         graph.ox_axis_title = 'Date'
         graph.oy_axis_title = 'Count'
@@ -357,16 +357,14 @@ class CommitsByAuthorsGraphReport(Report):
         for author, date, count in self._get_data(self.repo_url, cursor, paramstyle):
             graph.add_value(author, date, count)
         s = StringIO()
-        graph.render_to_stream(s)
+        graph.render_to_stream(s, standalone=False)
         svg_content = s.getvalue()
         return """
             <div class="report">
-                <a name="%(anchor_name)s"></a>
+                <a id="%(anchor_name)s"></a>
                 <h2>%(title)s</h2>
                 %(go_to_top_link)s
-                <p>
-                    %(svg_content)s
-                </p>
+                %(svg_content)s
             </div>
         """ % {
             'title': self.title,
@@ -374,4 +372,3 @@ class CommitsByAuthorsGraphReport(Report):
             'go_to_top_link': self.go_to_top_link(with_links),
             'svg_content': svg_content,
         }
-
