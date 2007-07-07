@@ -23,14 +23,14 @@ def parse_date(str, type=datetime.datetime):
 
 
 def ensure_date(s, type=datetime.datetime):
-    if isinstance(s, basestr):
+    if isinstance(s, basestring):
         return parse_date(s, type)
     else:
         return s
 
 
 def make_colors(collection):
-    """Create different colors for each values."""
+    """Create different colors for each value."""
     saturation = 1.0
     brightness = 0.75
     colors = {}

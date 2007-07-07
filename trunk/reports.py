@@ -67,8 +67,8 @@ class SQLTableReport(Report):
         self.sql = sql
         self.params = params
 
-    def generate(self, paramstyle, cursor, options, format='html', with_links=True):
-        db.execute(cursor=cursor, paramstyle=paramstyle, sql=self.sql, params=self.params)
+    def generate(self, cursor, options, format='html', with_links=True):
+        cursor.execute(self.sql, self.params)
         return self.format_result(format, cursor, with_links)
 
     def format_result(self, format, cursor, with_links):
@@ -117,14 +117,14 @@ class GeneralStatsReport(Report):
         Report.__init__(self, 'general', 'General Statistics')
         self.repo_url = repo_url
 
-    def generate(self, cursor, paramstyle, options, format='html', with_links=True):
+    def generate(self, cursor, options, format='html', with_links=True):
         if format == 'html':
-            return self.generate_html(cursor=cursor, paramstyle=paramstyle, with_links=with_links)
+            return self.generate_html(cursor=cursor, with_links=with_links)
         else:
             raise ValueError('unsupported format: %s' % format)
 
-    def generate_html(self, cursor,  paramstyle=None, with_links=True):
-        db.execute(cursor, paramstyle,
+    def generate_html(self, cursor, with_links=True):
+        cursor.execute(
             '''
                 select
                     min(rv_number),
@@ -239,8 +239,8 @@ class AllReports(ReportGroup):
 
     def create_commits_reports(self):
         group = ReportGroup(name='commits', title='Commits Statistics')
-        last_week = db.db_timestamp((datetime.datetime.now() - datetime.timedelta(7)))
-        last_month = db.db_timestamp((datetime.datetime.now() - datetime.timedelta(30)))
+        last_week = (datetime.datetime.now() - datetime.timedelta(7))
+        last_month =(datetime.datetime.now() - datetime.timedelta(30))
         group.add(SQLTableReport('authors_by_commits', 'Authors by commits',
             '''
                 select rv_author as Author, count(*) as Count
@@ -291,70 +291,67 @@ class CommitsByAuthorsGraphReport(Report):
         Report.__init__(self, 'commits_by_authors_graph', 'Commits by Authors')
         self.repo_url = repo_url
 
-    def _get_authors(self, repo_url, cursor, paramstyle):
+    def _get_authors(self, repo_url, cursor):
         sql = 'select distinct rv_author from revision where rv_repo_url = $url'
         params = {'url': repo_url}
-        db.execute(cursor=cursor, paramstyle=paramstyle, sql=sql, params=params)
+        cursor.execute(sql, params)
         return [r[0] for r in cursor.fetchall()]
 
-    def _get_data_db(self, repo_url, cursor, paramstyle):
-        sql = '''
-            select rv_author, substr(rv_timestamp, 1, 7), count(*)
-            from revision
-            where rv_repo_url = $url
-            group by substr(rv_timestamp, 1, 7), rv_author
-        '''
-        params = {'url': repo_url}
-        db.execute(cursor=cursor, paramstyle=paramstyle, sql=sql, params=params)
-        r = [(x[0], parse_date(x[1]), x[2]) for x in cursor]
-        return r
+    def _get_data(self, repo_url, cursor, authors):
+        """Return list of (author, date, count) triplets."""
 
-    def _get_data(self, repo_url, cursor, paramstyle):
-        data = self._get_data_db(repo_url, cursor, paramstyle)
-        date_dict = {}
-        author_date_range = {}
-        all_authors = set()
-        for t in data:
-            author = t[0]
-            date = t[1]
-            if date not in date_dict:
-                date_dict[date] = {}
-            date_dict[date][author] = t
-            if author not in author_date_range:
-                author_date_range[author] = (date, date)
-            else:
-                min_date, max_date = author_date_range[author]
-                if date < min_date: min_date = date
-                elif date > max_date: max_date = date
-                author_date_range[author] = (min_date, max_date)
-            if author not in all_authors: all_authors.add(author)
-        better_data = []
-        min_date = min(t[1] for t in data)
-        max_date = max(t[1] for t in data)
-        date = min_date
-        while date <= max_date:
-            for author in all_authors:
-                if date in date_dict and author in date_dict[date]:
-                    better_data.append(date_dict[date][author])
-                elif date >= author_date_range[author][0] and date <= author_date_range[author][1]:
-                    better_data.append((author, date, 0))
-                if date not in date_dict:
-                    print "something bad, date %s not found in date_dict" % date
-            # go to next month; XXX write something smarter
-            date += datetime.timedelta(days=1)
-            while date.day != 1: date += datetime.timedelta(days=1) 
-        return better_data
+        step = datetime.timedelta(days=30)
+        span = datetime.timedelta(days=60)
+        span_days = 7.0
 
-    def generate(self, cursor, paramstyle, options, format='html', with_links=True):
+        def date_range(d1, d2, step):
+            d = d1
+            while d < d2:
+                yield d
+                d += step
+
+        def get_author_data(author):
+            cursor.execute('''
+                select min(rv_timestamp), max(rv_timestamp)
+                from revision where rv_repo_url = $url
+                and rv_author = $author''', {'url': repo_url, 'author': author})
+            mindate, maxdate = map(ensure_date, cursor.fetchone())
+            print "date range: %s %s" % (repr(mindate), repr(maxdate))
+            author_data = []
+            dates = list(date_range(mindate + step, maxdate, step))
+            if maxdate not in dates: dates.append(maxdate)
+            for date in dates:
+                t1 = date - span
+                t2 = date
+                cursor.execute('''
+                    select count(*)
+                    from revision
+                    where rv_repo_url = $url
+                    and rv_author = $author
+                    and rv_timestamp > $t1
+                    and rv_timestamp <= $t2
+                ''', {'t1': t1, 't2': t2, 'url': repo_url, 'author': author})
+                cnt = cursor.fetchone()[0]
+                a = float(cnt) / float(span_days)
+                author_data.append((author, date, a))
+            return author_data
+
+        data = []
+        for author in authors:
+            data += get_author_data(author)
+        return data
+
+
+    def generate(self, cursor, options, format='html', with_links=True):
         graph = svg.Graph()
         graph.ox_axis_title = 'Date'
         graph.oy_axis_title = 'Count'
         graph.add_series('foo')
-        authors = self._get_authors(self.repo_url, cursor, paramstyle)
+        authors = self._get_authors(self.repo_url, cursor)
         for author in authors:
             graph.add_series(author)
         graph.randomize_series_colors()
-        for author, date, count in self._get_data(self.repo_url, cursor, paramstyle):
+        for author, date, count in self._get_data(self.repo_url, cursor, authors):
             graph.add_value(author, date, count)
         s = StringIO()
         graph.render_to_stream(s, standalone=False)
@@ -372,3 +369,4 @@ class CommitsByAuthorsGraphReport(Report):
             'go_to_top_link': self.go_to_top_link(with_links),
             'svg_content': svg_content,
         }
+

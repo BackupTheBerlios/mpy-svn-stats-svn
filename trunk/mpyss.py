@@ -48,7 +48,7 @@ class OnePageHTMLStatsGenerator(object):
                         </ul>
                     </li>""")
 
-    def generate(self, options, reports, paramstyle, cursor):
+    def generate(self, options, reports, cursor):
 
         time_generated_start = datetime.datetime.now()
 
@@ -67,7 +67,6 @@ class OnePageHTMLStatsGenerator(object):
                 html = report.generate(
                     cursor=cursor,
                     options=options,
-                    paramstyle=paramstyle,
                     format='html',
                     with_links=True
                 )
@@ -115,7 +114,7 @@ class OnePageHTMLStatsGenerator(object):
         """) % {
             'body': s.getvalue(),
             'css': file('mpyss.css').read(),
-            'time_generated': time_generated_end,
+            'time_generated': time_generated_end.strftime('%Y-%m-%d %H:%M:%S'),
             'seconds': generated_in.seconds,
             'title': title,
         })
@@ -126,6 +125,7 @@ class OnePageHTMLStatsGenerator(object):
 def main(argv):
     options, args = parse_options()
     conn = db.connect()
+    db.create_db_if_needed(conn)
     if options.parse:
         print "parsing"
         if options.input == '-':
@@ -148,7 +148,7 @@ def generate_reports(options, conn):
     reports = AllReports(options)
     cursor = conn.cursor()
     generator = OnePageHTMLStatsGenerator()
-    generator.generate(options, reports, db.paramstyle(), cursor)
+    generator.generate(options, reports, cursor)
 
 
 class SAXLogParserHandler(xml.sax.handler.ContentHandler):
@@ -197,13 +197,12 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
         self.current_characters = u''
 
     def add_current_logentry(self):
-        db_module = db.db_module()
         number = int(self.number)
         msg = self.msg
-        date = parse_date(self.date, db_module.Timestamp)
+        date = parse_date(self.date)
         author = self.author
 
-        db.execute(self.cursor, db.paramstyle(),
+        self.cursor.execute(
             '''
                 delete from changed_path where
                     rv_repo_url = $url and rv_number = $number
@@ -212,7 +211,7 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
                 'number': number,
         })
 
-        db.execute(self.cursor, db.paramstyle(),
+        self.cursor.execute(
             '''
                 delete from revision where
                     rv_repo_url = $url and rv_number = $number
@@ -221,7 +220,7 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
                     'number': number
         })
 
-        db.execute(self.cursor, db.paramstyle(),
+        self.cursor.execute(
             '''
                 insert into revision (
                     rv_repo_url,
@@ -244,7 +243,7 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
         })
 
         for action, path in self.paths:
-            db.execute(self.cursor, db.paramstyle(),
+            self.cursor.execute(
             '''
                 insert into changed_path (
                     rv_repo_url,
@@ -321,9 +320,57 @@ def parse_options():
     return (options, args)
 
 
+def create_dates(dbconn):
+    """Create dates table for use in joins."""
+    curs = dbconn.cursor()
+    if not dbconn.table_exists('calendar'):
+        raise Exception()
+    print "creating dates..."
+    sql = 'select min(rv_timestamp), max(rv_timestamp) from revision'
+    curs.execute(sql)
+    min_date, max_date = map(ensure_date, curs.fetchone())
+    print "min date: %s" % repr(min_date)
+    print "max date: %s" % repr(max_date)
+    min_year = min_date.year
+    max_year = max_date.year
+    for year in xrange(min_year, max_year+1):
+        for month in range(1, 13):
+            d = datetime.datetime(year, month, 1)
+            curs.execute('''
+                    select count(*)
+                    from calendar
+                    where timestamp = $timestamp
+                    and calendar_type = 'month'
+                ''',
+                {'timestamp': d})
+            cnt = curs.fetchone()[0]
+            if cnt == 0:
+                curs.execute(
+                    '''insert into calendar (
+                        timestamp, calendar_type,
+                        year, month, day,
+                        hour, minute, second
+                    ) values (
+                        $timestamp, $calendar_type,
+                        $year, $month, $day,
+                        $hour, $minute, $second
+                    )
+                    ''',
+                    {'timestamp': d,
+                        'calendar_type': 'month',
+                        'year': d.year,
+                        'month': d.month,
+                        'day': d.day,
+                        'hour': d.hour,
+                        'minute': d.minute,
+                        'second': d.second
+                    })
+
+
 def get_data(dbconn, input_stream, repo_url):
     handler = SAXLogParserHandler(dbconn, repo_url)
     parser = xml.sax.parse(input_stream, handler)
+    create_dates(dbconn)
     dbconn.commit()
 
 

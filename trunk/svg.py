@@ -47,7 +47,7 @@ class Graph:
         self.series.add(series_name)
 
     def add_value(self, series_name, key, value):
-        assert series_name in self.series
+        assert series_name in self.series, Exception("unknown series name: %s" % series_name)
         self.data[(series_name, key)] = value
 
     def render_to_stream(self, stream, standalone=False):
