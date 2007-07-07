@@ -1,5 +1,7 @@
 """Define various reports."""
 
+from __future__ import division
+
 import datetime
 import cgi
 from cStringIO import StringIO
@@ -277,6 +279,8 @@ class AllReports(ReportGroup):
                 'last_week': last_week,
             }))
         group.add(CommitsByAuthorsGraphReport(repo_url=self.options.repo_url))
+        group.add(CommitsByAuthorsGraphReport(repo_url=self.options.repo_url, date_range='month'))
+        group.add(CommitsByAuthorsGraphReport(repo_url=self.options.repo_url, date_range='week'))
         self.add(group)
 
     def create_number_of_changed_paths_reports(self):
@@ -287,9 +291,23 @@ class AllReports(ReportGroup):
 class CommitsByAuthorsGraphReport(Report):
     """Graph number of commits committers made."""
 
-    def __init__(self, repo_url):
-        Report.__init__(self, 'commits_by_authors_graph', 'Commits by Authors')
+    def __init__(self, repo_url, date_range='all'):
+        name = 'commits_by_authors_graph_%s' % date_range
+        title = self.make_title(date_range)
+        Report.__init__(self, name, title)
         self.repo_url = repo_url
+        self.date_range = date_range
+
+    @staticmethod
+    def make_title(date_range):
+        if date_range == 'all':
+            return 'Commits graph'
+        elif date_range == 'month':
+            return 'Commits graph for last month'
+        elif date_range == 'week':
+            return 'Commits graph for last week'
+        else:
+            raise Exception()
 
     def _get_authors(self, repo_url, cursor):
         sql = 'select distinct rv_author from revision where rv_repo_url = $url'
@@ -297,14 +315,19 @@ class CommitsByAuthorsGraphReport(Report):
         cursor.execute(sql, params)
         return [r[0] for r in cursor.fetchall()]
 
-    def _get_data(self, repo_url, cursor, authors):
+    def _get_data(self, repo_url, cursor, authors, date_range):
         """Return list of (author, date, count) triplets."""
 
-        step = datetime.timedelta(days=30)
-        span = datetime.timedelta(days=60)
-        span_days = 7.0
+        no_of_steps = 100
+        seconds_in_day = 60 * 60 * 24
+        def timedelta_to_seconds(t): return t.seconds + t.microseconds / 1000000 + t.days * seconds_in_day
+        step = datetime.timedelta(
+            seconds=(timedelta_to_seconds(date_range[1] - date_range[0])/no_of_steps)
+        )
+        span = step * 5
+        span_days = timedelta_to_seconds(step) / seconds_in_day
 
-        def date_range(d1, d2, step):
+        def generate_dates(d1, d2, step):
             d = d1
             while d < d2:
                 yield d
@@ -314,11 +337,15 @@ class CommitsByAuthorsGraphReport(Report):
             cursor.execute('''
                 select min(rv_timestamp), max(rv_timestamp)
                 from revision where rv_repo_url = $url
-                and rv_author = $author''', {'url': repo_url, 'author': author})
+                and rv_author = $author
+                and rv_timestamp >= $mindate and rv_timestamp <= $maxdate
+            ''', {'url': repo_url, 'author': author,
+                'mindate': date_range[0], 'maxdate': date_range[1]})
             mindate, maxdate = map(ensure_date, cursor.fetchone())
-            print "date range: %s %s" % (repr(mindate), repr(maxdate))
+            if mindate is None and maxdate is None: return []
+#            print "date range: %s %s" % (repr(mindate), repr(maxdate))
             author_data = []
-            dates = list(date_range(mindate + step, maxdate, step))
+            dates = list(generate_dates(mindate + step, maxdate, step))
             if maxdate not in dates: dates.append(maxdate)
             for date in dates:
                 t1 = date - span
@@ -330,10 +357,17 @@ class CommitsByAuthorsGraphReport(Report):
                     and rv_author = $author
                     and rv_timestamp > $t1
                     and rv_timestamp <= $t2
-                ''', {'t1': t1, 't2': t2, 'url': repo_url, 'author': author})
+                ''', {'t1': t1, 't2': t2,
+                    'url': repo_url, 'author': author,})
+                    #'mindate': date_range[0], 'maxdate': date_range[1]})
                 cnt = cursor.fetchone()[0]
-                a = float(cnt) / float(span_days)
-                author_data.append((author, date, a))
+                if cnt:
+                    a = cnt / (timedelta_to_seconds(t2-t1)/seconds_in_day)
+                    author_data.append((author, date, a))
+                elif cnt == 0:
+                    author_data.append((author, date, 0))
+                else:
+                    raise Exception()
             return author_data
 
         data = []
@@ -341,17 +375,30 @@ class CommitsByAuthorsGraphReport(Report):
             data += get_author_data(author)
         return data
 
+    def get_date_range(self, cursor):
+        cursor.execute('''
+            select max(rv_timestamp), min(rv_timestamp)
+            from revision
+            where rv_repo_url = $url
+        ''', {'url': self.repo_url})
+        maxdate, mindate = map(ensure_date, cursor.fetchone())
+        if self.date_range == 'month':
+            mindate = max(mindate, maxdate - datetime.timedelta(days=30))
+        elif self.date_range == 'week':
+            mindate = max(mindate, maxdate - datetime.timedelta(days=7))
+        return mindate, maxdate
 
     def generate(self, cursor, options, format='html', with_links=True):
         graph = svg.Graph()
         graph.ox_axis_title = 'Date'
         graph.oy_axis_title = 'Count'
         graph.add_series('foo')
+        mindate, maxdate = self.get_date_range(cursor)
         authors = self._get_authors(self.repo_url, cursor)
         for author in authors:
             graph.add_series(author)
         graph.randomize_series_colors()
-        for author, date, count in self._get_data(self.repo_url, cursor, authors):
+        for author, date, count in self._get_data(self.repo_url, cursor, authors, (mindate, maxdate)):
             graph.add_value(author, date, count)
         s = StringIO()
         graph.render_to_stream(s, standalone=False)

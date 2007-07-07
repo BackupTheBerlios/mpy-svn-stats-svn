@@ -28,7 +28,7 @@ class Graph:
 
     static_graph_count = 0
 
-    def __init__(self, width=800, height=200,
+    def __init__(self, width=900, height=400,
             margin=20,
             ox_axis_title='',
             oy_axis_title=''):
