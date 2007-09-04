@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# $Id$
 # -*- coding: ascii -*-
 
 # MPY SVN STATS - Subversion Repository Statistics Generator 
@@ -891,7 +892,10 @@ class SimpleFunctionGroup(GroupStatistic):
             rows = []
 
             for k,v in data:
-                percentage = float(v) * 100.0 / float(total_sum)
+                if total_sum == 0:
+                    percentage = 0.0
+                else:
+                    percentage = float(v) * 100.0 / float(total_sum)
                 assert percentage >= 0.0
                 assert percentage <= 100.0
                 rows.append([k,
