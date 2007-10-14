@@ -135,7 +135,8 @@ class Graph:
                     print 'd: ', repr(d)
                     print 'min: %s' % repr(min)
                     print 'max: %s' % repr(max)
-                    raise e
+                    # todo - investigate further
+                    p[i] = 0
             return p
         pts = [pos(d) for d in dd]
         return pts
