@@ -202,6 +202,8 @@ class SAXLogParserHandler(xml.sax.handler.ContentHandler):
         date = parse_date(self.date)
         author = self.author
 
+        if author is None: author = ''
+
         self.cursor.execute(
             '''
                 delete from changed_path where
